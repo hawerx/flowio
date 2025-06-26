@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+python-socketio
+websockets
+torch
+torchaudio
+transformers
+accelerate
+pyannote.audio
+soundfile
+pydub
