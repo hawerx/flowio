@@ -144,11 +144,12 @@ class _ConversationPageState extends State<ConversationPage> {
       provider.addMessage(message);
 
       Future.delayed(const Duration(milliseconds: 800), () {
-        if (mounted)
+        if (mounted) {
           provider.updateLastMessage(
             originalText:
                 'Esto es una transcripción simulada #${++messageCounter}.',
           );
+        }
       });
 
       Future.delayed(const Duration(seconds: 2), () {

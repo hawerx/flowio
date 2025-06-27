@@ -4,6 +4,8 @@ import '../../core/providers/conversation_provider.dart';
 import 'message_bubble.dart';
 
 class ConversationHistory extends StatelessWidget {
+  const ConversationHistory({super.key});
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<ConversationProvider>();

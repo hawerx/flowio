@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import '../../core/providers/conversation_provider.dart';
 
 class ControlButton extends StatelessWidget {
+  const ControlButton({super.key});
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<ConversationProvider>();
@@ -11,7 +13,7 @@ class ControlButton extends StatelessWidget {
     IconData iconData = LucideIcons.play;
     String text = "Iniciar Conversación";
     Color bgColor = Colors.green;
-    VoidCallback? onPressed = () => provider.toggleConversation();
+    onPressed() => provider.toggleConversation();
 
     if (provider.isConversing) {
       text = "Detener Conversación";

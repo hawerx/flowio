@@ -4,6 +4,8 @@ import '../../core/models/language.dart';
 import '../../core/providers/conversation_provider.dart';
 
 class LanguageSelector extends StatelessWidget {
+  const LanguageSelector({super.key});
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<ConversationProvider>();

@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import '../../core/providers/conversation_provider.dart';
 
 class TurnIndicator extends StatefulWidget {
+  const TurnIndicator({super.key});
+
   @override
   _TurnIndicatorState createState() => _TurnIndicatorState();
 }
