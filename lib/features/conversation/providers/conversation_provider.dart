@@ -13,12 +13,11 @@ class ConversationProvider extends ChangeNotifier {
   Language targetLang = availableLanguages[0]; // Inglés
 
   List<Message> history = [];
+  String partialTranscription = "";
 
   static const List<Language> availableLanguages = [
     Language('en', 'Inglés'), Language('es', 'Español'), Language('fr', 'Francés'),
     Language('de', 'Alemán'), Language('it', 'Italiano'), Language('pt', 'Portugués'),
-    Language('ru', 'Ruso'), Language('ja', 'Japonés'), Language('ko', 'Coreano'),
-    Language('zh', 'Chino (Mandarín)'), Language('ar', 'Árabe'), Language('hi', 'Hindi'),
   ];
   
   void startConversation() {
@@ -26,6 +25,7 @@ class ConversationProvider extends ChangeNotifier {
     isListening = true;
     currentSpeaker = 'source';
     history.clear();
+    partialTranscription = "";
     notifyListeners();
   }
 
@@ -34,60 +34,38 @@ class ConversationProvider extends ChangeNotifier {
     isListening = false;
     isProcessing = false;
     currentSpeaker = null;
+    partialTranscription = "";
     notifyListeners();
   }
 
-  void setSilenceDuration(double value) {
-    silenceDuration = value;
+  void updatePartialTranscription(String text) {
+    partialTranscription = text;
     notifyListeners();
   }
 
-  void setSourceLang(Language lang) {
-    sourceLang = lang;
+  void commitPartialTranscription() {
+    if (partialTranscription.isNotEmpty) {
+      addMessage(Message(
+        id: DateTime.now().toIso8601String(),
+        isFromSource: currentSpeaker == 'source',
+        originalText: partialTranscription,
+        translatedText: "..." // Indicador de traducción
+      ));
+    }
+    partialTranscription = "";
     notifyListeners();
   }
 
-  void setTargetLang(Language lang) {
-    targetLang = lang;
-    notifyListeners();
-  }
-
-  void addMessage(Message message) {
-    history.add(message);
-    notifyListeners();
-  }
-  
-  void updateLastMessage({String? originalText, String? translatedText}) {
+  void setSilenceDuration(double value) { silenceDuration = value; notifyListeners(); }
+  void setSourceLang(Language lang) { sourceLang = lang; notifyListeners(); }
+  void setTargetLang(Language lang) { targetLang = lang; notifyListeners(); }
+  void addMessage(Message message) { history.add(message); notifyListeners(); }
+  void updateLastMessage({String? translatedText}) {
     if (history.isNotEmpty) {
-      if(originalText != null) history.last.originalText = originalText;
       if(translatedText != null) history.last.translatedText = translatedText;
       notifyListeners();
     }
   }
-
-  void removeLastMessageIfEmpty() {
-    if (history.isNotEmpty && history.last.originalText.isEmpty) {
-      history.removeLast();
-      notifyListeners();
-    }
-  }
-  
-  void switchTurn() {
-    currentSpeaker = (currentSpeaker == 'source') ? 'target' : 'source';
-    isListening = true;
-    isProcessing = false;
-    notifyListeners();
-  }
-
-  void revertToListening() {
-    isListening = true;
-    isProcessing = false;
-    notifyListeners();
-  }
-
-  void setProcessing() {
-    isListening = false;
-    isProcessing = true;
-    notifyListeners();
-  }
+  void switchTurn() { currentSpeaker = (currentSpeaker == 'source') ? 'target' : 'source'; isListening = true; isProcessing = false; notifyListeners(); }
+  void setProcessing() { isListening = false; isProcessing = true; notifyListeners(); }
 }

@@ -39,7 +39,7 @@ dependencies:
   web_socket_channel: ^3.0.3    # For WebSocket communication
   record: ^6.0.0                # Records audio from the mic
   just_audio: ^0.10.4           # Plays audio files
-
+  flutter_tts: ^4.2.3           # Text-to-speech package for Flutter, used for voice translations
   # Utilities
   path_provider: ^2.1.5         # Provides access to the file system paths
   permission_handler: ^12.0.0+1 # Handles permissions for accessing the microphone and storage
