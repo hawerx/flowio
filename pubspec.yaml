@@ -44,6 +44,7 @@ dependencies:
   path_provider: ^2.1.5         # Provides access to the file system paths
   permission_handler: ^12.0.0+1 # Handles permissions for accessing the microphone and storage
   logger: ^2.6.0                # Provides a logging utility for debugging 
+  vad: ^0.0.6           # Voice Activity Detection (VAD) for detecting speech in audio streams
 
 dev_dependencies:
   flutter_test:

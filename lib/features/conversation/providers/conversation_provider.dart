@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/models/language.dart';
 import '../../../core/models/message.dart';
+import '../../../core/utils/logger.dart';
 
 class ConversationProvider extends ChangeNotifier {
   bool isConversing = false;
@@ -13,7 +14,7 @@ class ConversationProvider extends ChangeNotifier {
   Language targetLang = availableLanguages[0]; // Inglés
 
   List<Message> history = [];
-  String partialTranscription = "";
+  // Se elimina partialTranscription
 
   static const List<Language> availableLanguages = [
     Language('en', 'Inglés'), Language('es', 'Español'), Language('fr', 'Francés'),
@@ -21,51 +22,77 @@ class ConversationProvider extends ChangeNotifier {
   ];
   
   void startConversation() {
+    logger.i("---> LLamada a funcion startConversation[ConversationProvider]: Iniciando conversación. | isConversing: $isConversing | isListening: $isListening");
     isConversing = true;
     isListening = true;
     currentSpeaker = 'source';
     history.clear();
-    partialTranscription = "";
     notifyListeners();
   }
 
   void stopConversation() {
+    logger.i("---> LLamada a funcion stopConversacion[ConversationProvider]: Deteniendo conversacion. | isConversing: $isConversing | isListening: $isListening | isProcessing: $isProcessing | currentSpeaker: $currentSpeaker");
     isConversing = false;
     isListening = false;
     isProcessing = false;
     currentSpeaker = null;
-    partialTranscription = "";
     notifyListeners();
   }
 
-  void updatePartialTranscription(String text) {
-    partialTranscription = text;
-    notifyListeners();
+  void setSilenceDuration(double value) { 
+    logger.d("---> setSilenceDuration: $value");
+    silenceDuration = value; 
+    notifyListeners(); 
   }
 
-  void commitPartialTranscription() {
-    if (partialTranscription.isNotEmpty) {
-      addMessage(Message(
-        id: DateTime.now().toIso8601String(),
-        isFromSource: currentSpeaker == 'source',
-        originalText: partialTranscription,
-        translatedText: "..." // Indicador de traducción
-      ));
-    }
-    partialTranscription = "";
-    notifyListeners();
+  void setSourceLang(Language lang) { 
+    logger.d("---> setSourceLang: ${lang.name}");
+    sourceLang = lang; 
+    notifyListeners(); 
   }
 
-  void setSilenceDuration(double value) { silenceDuration = value; notifyListeners(); }
-  void setSourceLang(Language lang) { sourceLang = lang; notifyListeners(); }
-  void setTargetLang(Language lang) { targetLang = lang; notifyListeners(); }
-  void addMessage(Message message) { history.add(message); notifyListeners(); }
-  void updateLastMessage({String? translatedText}) {
+  void setTargetLang(Language lang) { 
+    logger.d("---> setTargetLang: ${lang.name}");
+    targetLang = lang; 
+    notifyListeners(); 
+  }
+
+  void addMessage(Message message) { 
+    logger.d("---> addMessage: Añadiendo mensaje al historial: '${message.originalText}'");
+    // Usamos insert en lugar de add para que el nuevo mensaje aparezca arriba
+    history.insert(0, message); 
+    notifyListeners(); 
+  }
+
+  void updateLastMessage({String? originalText, String? translatedText}) {
+    logger.i("---> updateLastMessage: Actualizando último mensaje con original: '$originalText' y traducción: '$translatedText'");
     if (history.isNotEmpty) {
-      if(translatedText != null) history.last.translatedText = translatedText;
+      if(originalText != null) history.first.originalText = originalText;
+      if(translatedText != null) history.first.translatedText = translatedText;
       notifyListeners();
     }
   }
-  void switchTurn() { currentSpeaker = (currentSpeaker == 'source') ? 'target' : 'source'; isListening = true; isProcessing = false; notifyListeners(); }
-  void setProcessing() { isListening = false; isProcessing = true; notifyListeners(); }
+
+  // Se añade esta función para eliminar el último mensaje si no se detectó habla
+  void removeLastMessage() {
+    if (history.isNotEmpty) {
+      history.removeAt(0);
+      notifyListeners();
+    }
+  }
+
+  void switchTurn() { 
+    logger.i("---> switchTurn: Cambiando turno. Nuevo hablante: ${(currentSpeaker == 'source') ? 'target' : 'source'}");
+    currentSpeaker = (currentSpeaker == 'source') ? 'target' : 'source'; 
+    isListening = true; 
+    isProcessing = false; 
+    notifyListeners(); 
+  }
+
+  void setProcessing() { 
+    logger.i("---> setProcessing: Cambiando a estado 'Procesando'.");
+    isListening = false; 
+    isProcessing = true; 
+    notifyListeners(); 
+  }
 }
