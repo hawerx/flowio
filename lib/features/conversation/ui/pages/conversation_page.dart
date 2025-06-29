@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:vad/vad.dart'; // <-- Importar el paquete VAD
 import 'package:just_audio/just_audio.dart';
@@ -33,6 +32,7 @@ class ConversationPage extends StatefulWidget {
 }
 
 class _ConversationPageState extends State<ConversationPage> {
+  
   final AudioRecorder _audioRecorder = AudioRecorder();
   final FlutterTts _flutterTts = FlutterTts();
   final AudioPlayer _beepPlayer = AudioPlayer();
@@ -50,9 +50,9 @@ class _ConversationPageState extends State<ConversationPage> {
   @override
   void initState() {
     super.initState();
+    _initTts();
     _initVad();
     context.read<ConversationProvider>().addListener(_onStateChange);
-    _setupTts();
     _loadBeepSound();
     logger.i("ConversationPage inicializada.");
   }
@@ -74,12 +74,21 @@ class _ConversationPageState extends State<ConversationPage> {
     }
   }
 
-  Future<void> _setupTts() async {
-    _flutterTts.setCompletionHandler(() {
-      logger.i("TTS completado. Procediendo al siguiente turno.");
-      _nextTurn();
-    });
+  Future<void> _initTts() async {
+    
+  // [LA CLAVE DE TODO] Esta línea le dice al plugin que el Future de 'speak'
+  // solo debe completarse cuando la locución haya terminado.
+  await _flutterTts.awaitSpeakCompletion(true);
+
+  _flutterTts.setErrorHandler((msg) {
+    logger.e("Error en el motor TTS: $msg");
+    // Aunque tengamos el await, si el motor da un error,
+    // es bueno tener un log para saber qué ha pasado.
+  });
+  
+  logger.i("Motor TTS configurado para esperar la finalización.");
   }
+  
 
   Future<void> _loadBeepSound() async {
     try {
@@ -205,16 +214,16 @@ class _ConversationPageState extends State<ConversationPage> {
     
     const recordConfig = RecordConfig(encoder: AudioEncoder.pcm16bits, sampleRate: 16000, numChannels: 1);
     
-    await _audioRecorder.stop();
+    if (await _audioRecorder.isRecording()) {
+      await _audioRecorder.stop();
+    }
     await _audioStreamSub?.cancel();
 
     _audioStreamSub = (await _audioRecorder.startStream(recordConfig)).listen(
       (data) {
-        if (_channel != null && data.isNotEmpty) {
-          String audioBase64 = base64Encode(data);
-          String jsonData = jsonEncode({"audio_data": audioBase64});
-          _channel!.sink.add(jsonData);
-        }
+    if (_channel != null && data.isNotEmpty) {
+        _channel!.sink.add(data);
+      }
       },
       onError: (err, stackTrace) => logger.e("Error en stream de grabación.", error: err, stackTrace: stackTrace)
     );
@@ -270,40 +279,64 @@ class _ConversationPageState extends State<ConversationPage> {
   }
 
   Future<void> _speakTextAndProceed(String textToSpeak) async {
-    if (!mounted) return;
-    final provider = context.read<ConversationProvider>();
-    final targetLang = provider.currentSpeaker == 'source' ? provider.targetLang.code : provider.sourceLang.code;
-    logger.i("Iniciando TTS para el texto: '$textToSpeak' en idioma '$targetLang'");
-    try {
-        await _flutterTts.setLanguage(targetLang);
-        await _flutterTts.speak(textToSpeak);
-    } catch(e, stackTrace) {
-        logger.e("Error al ejecutar TTS. Saltando al siguiente turno.", error: e, stackTrace: stackTrace);
-        _nextTurn(); // Si el TTS falla, pasamos al siguiente turno igualmente
-    }
+  if (!mounted) return;
+  
+  final provider = context.read<ConversationProvider>();
+  final targetLang = provider.currentSpeaker == 'source' 
+      ? provider.targetLang.code 
+      : provider.sourceLang.code;
+
+  if (textToSpeak.trim().isEmpty) {
+    logger.w("El texto para TTS está vacío. Saltando al siguiente turno directamente.");
+    _nextTurn();
+    return;
   }
 
-  Future<void> _nextTurn() async {
-    if (!mounted || !context.read<ConversationProvider>().isConversing) {
-      logger.w("Se intentó pasar al siguiente turno, pero la conversación ya no está activa. Abortando.");
-      return;
-    }
+  logger.i("Iniciando TTS para el texto: '$textToSpeak' en idioma '$targetLang'");
+  
+  try {
+    // [EL GRAN CAMBIO] Disparamos el TTS pero NO lo esperamos (fire and forget).
+    _flutterTts.setLanguage(targetLang);
     
-    logger.i("Reproduciendo sonido de cambio de turno.");
-    try {
-      await _beepPlayer.seek(Duration.zero);
-      await _beepPlayer.play();
-      // Espera a que el beep termine de sonar
-      await _beepPlayer.playerStateStream.firstWhere((s) => s.processingState == ProcessingState.completed);
-      logger.d("Sonido de cambio de turno finalizado.");
-    } catch (e, stackTrace) {
-      logger.e("Error al reproducir el sonido de beep.", error: e, stackTrace: stackTrace);
-    }
+    // Gracias a 'awaitSpeakCompletion(true)', este await ahora sí funciona
+    // y esperará a que la voz termine de reproducirse.
+    await _flutterTts.speak(textToSpeak);
 
-    if (!mounted) return;
-    context.read<ConversationProvider>().switchTurn();
-    _startListeningCycle();
+    // Inmediatamente después, procedemos al siguiente turno.
+    // Esto desacopla la finalización del TTS del flujo principal de la conversación.
+    logger.i("TTS iniciado (sin esperar). Procediendo al siguiente turno.");
+    _nextTurn();
+
+  } catch (e, stackTrace) {
+    logger.e("Error al iniciar TTS. Forzando el paso al siguiente turno.", error: e, stackTrace: stackTrace);
+    // Aunque no esperamos, el 'speak' podría fallar al iniciarse.
+    // Si eso ocurre, nos aseguramos de continuar el flujo.
+    _nextTurn();
   }
+}
+
+ Future<void> _nextTurn() async {
+  if (!mounted || !context.read<ConversationProvider>().isConversing) {
+    logger.w("Se intentó pasar al siguiente turno, pero la conversación ya no está activa. Abortando.");
+    return;
+  }
+    
+  logger.i("Reproduciendo sonido de cambio de turno.");
+  try {
+    await _beepPlayer.seek(Duration.zero);
+    await _beepPlayer.play();
+  } catch (e, stackTrace) {
+    logger.e("Error al reproducir el sonido de beep.", error: e, stackTrace: stackTrace);
+  }
+
+  if (!mounted) return; // Comprobar de nuevo después del delay
+  
+  // Cambiamos el estado en el provider.
+  context.read<ConversationProvider>().switchTurn();
+
+  // Iniciamos el ciclo de escucha para el nuevo turno.
+  _startListeningCycle();
+}
 
   @override
   void dispose() {
@@ -314,6 +347,7 @@ class _ConversationPageState extends State<ConversationPage> {
     _vad?.dispose();
     _beepPlayer.dispose();
     _audioRecorder.dispose();
+    _flutterTts.stop();
     super.dispose();
   }
 
