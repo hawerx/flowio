@@ -35,14 +35,14 @@ class _StatusIndicatorState extends State<StatusIndicator> with SingleTickerProv
     if (provider.isConversing) {
       if (provider.isListening) {
         final lang = provider.currentSpeaker == 'source' ? provider.sourceLang : provider.targetLang;
-        statusText = "Escuchando (${lang.name})...";
+        statusText = "Escuchando ${lang.name} (${provider.currentSpeaker == 'source' ? 'Persona 1' : 'Persona 2'})...";
         indicatorColor = Colors.green;
         statusIcon = FadeTransition(
           opacity: _animationController,
           child: const Icon(Icons.mic, color: Colors.green),
         );
       } else if (provider.isProcessing) {
-        statusText = "Procesando...";
+        statusText = "Procesando traducción...";
         indicatorColor = Colors.orange;
         statusIcon = const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 3));
       }
@@ -50,7 +50,7 @@ class _StatusIndicatorState extends State<StatusIndicator> with SingleTickerProv
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      color: indicatorColor.withAlpha((255 * 0.1).round()), // CORREGIDO
+      color: indicatorColor.withAlpha((255 * 0.1).round()),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [

@@ -3,6 +3,7 @@ import os
 import json
 import asyncio
 import numpy as np
+import scipy.signal
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from transformers import pipeline as hf_pipeline
 import torch
@@ -46,6 +47,17 @@ class PipelineManager:
 
 pipeline_manager = PipelineManager()
 
+def is_valid_audio(audio_np, min_duration=0.3, min_volume_threshold=0.005):
+    """Validar si el audio contiene habla útil"""
+    duration = len(audio_np) / 16000
+    if duration < min_duration:
+        return False, f"Duración muy corta: {duration:.2f}s"
+    
+    rms_volume = np.sqrt(np.mean(audio_np**2))
+    if rms_volume < min_volume_threshold:
+        return False, f"Volumen muy bajo: {rms_volume:.4f}"
+    
+    return True, "Audio válido"
 
 @app.websocket("/ws/translate_stream")
 async def websocket_endpoint(websocket: WebSocket):
@@ -56,78 +68,102 @@ async def websocket_endpoint(websocket: WebSocket):
     target_lang = None
 
     try:
-        # 1. Esperar mensaje de configuración inicial
+        # Configuración inicial
         config_message = await websocket.receive_json()
-        print(f"[INFO] Mensaje de configuración recibido: {config_message}")
         if config_message.get("event") == "start":
             source_lang = config_message.get("source_lang")
             target_lang = config_message.get("target_lang")
-            if not all([source_lang, target_lang]):
-                await websocket.close(code=1003, reason="Falta source_lang o target_lang")
-                return
+            print(f"[CONFIG] Idiomas configurados: {source_lang} -> {target_lang}")
         else:
-            await websocket.close(code=1003, reason="El primer mensaje debe ser 'start'")
+            await websocket.close(code=1003, reason="Primer mensaje debe ser 'start'")
             return
 
-        # 2. Bucle de conversación principal (un ciclo por turno)
+        # Bucle principal - SIN TIMEOUTS
         while True:
-            print(f"\n[TURN START] Esperando audio para: {source_lang} -> {target_lang}")
+            print(f"\n[TURN START] Esperando audio: {source_lang} -> {target_lang}")
             audio_buffer = bytearray()
             
-            # 3. Bucle de recepción de datos para este turno
+            # Recepción de audio - SIN TIMEOUT
             while True:
                 message = await websocket.receive()
                 
-                # [LA CORRECCIÓN CLAVE ESTÁ AQUÍ]
-                # Inspeccionamos el diccionario del mensaje
-                if "bytes" in message and message["bytes"] is not None:
+                if "bytes" in message and message["bytes"]:
                     chunk = message["bytes"]
                     audio_buffer.extend(chunk)
-                    print(f"[DEBUG] Recibidos {len(chunk)} bytes. Buffer total: {len(audio_buffer)} bytes.")
-                elif "text" in message and message["text"] is not None:
-                    try:
-                        data = json.loads(message["text"])
-                        if data.get("event") == "end_of_speech":
-                            print("[INFO] Señal 'end_of_speech' recibida. Finalizando recepción de audio.")
-                            break # Salir del bucle de recepción
-                    except json.JSONDecodeError:
-                        print(f"[WARN] Recibido mensaje de texto no-JSON: {message['text']}")
+                    print(f"[DEBUG] Recibidos {len(chunk)} bytes. Total: {len(audio_buffer)}")
+                    
+                elif "text" in message and message["text"]:
+                    data = json.loads(message["text"])
+                    if data.get("event") == "end_of_speech":
+                        print("[INFO] Fin de habla recibido.")
+                        break
             
-            # 4. Procesar el audio del turno
-            if not audio_buffer:
-                print("[WARN] No se recibió audio. Saltando turno.")
+            # Procesar audio
+            if len(audio_buffer) < 2000:
+                print(f"[WARN] Audio insuficiente: {len(audio_buffer)} bytes")
                 await websocket.send_text(json.dumps({"type": "no_speech_detected"}))
-            else:
-                print(f"[INFO] Procesando {len(audio_buffer)} bytes de audio...")
-                audio_np = np.frombuffer(audio_buffer, dtype=np.int16).astype(np.float32) / 32768.0
+                continue
                 
-                print(f"[INFO] Transcribiendo en '{source_lang}'...")
-                result = transcription_pipeline({"sampling_rate": 16000, "raw": audio_np}, generate_kwargs={"language": source_lang})
-                original_text = result["text"].strip()
-                print(f"[INFO] Transcrito: '{original_text}'")
-
-                if not original_text:
-                    await websocket.send_text(json.dumps({"type": "no_speech_detected"}))
-                else:
-                    translator = await pipeline_manager.get_translation_pipeline(source_lang, target_lang)
-                    if translator:
-                        translated_text = translator(original_text)[0]["translation_text"]
-                        print(f"[INFO] Traducido: '{translated_text}'")
-                        await websocket.send_text(json.dumps({
-                            "type": "final_translation",
-                            "original_text": original_text,
-                            "translated_text": translated_text
-                        }))
-                    else:
-                        await websocket.send_text(json.dumps({"type": "error", "message": "Translation model failed to load"}))
+            print(f"[INFO] Procesando {len(audio_buffer)} bytes de audio...")
+            audio_np = np.frombuffer(audio_buffer, dtype=np.int16).astype(np.float32) / 32768.0
             
-            # 5. Intercambiar idiomas para el siguiente turno
+            # Validar audio
+            is_valid, reason = is_valid_audio(audio_np)
+            if not is_valid:
+                print(f"[WARN] Audio inválido: {reason}")
+                await websocket.send_text(json.dumps({"type": "no_speech_detected"}))
+                continue
+
+            # TRANSCRIBIR
+            print(f"[TRANSCRIPTION] Iniciando transcripción en '{source_lang}'...")
+            result = transcription_pipeline(
+                {"sampling_rate": 16000, "raw": audio_np},
+                generate_kwargs={
+                    "language": source_lang,
+                    "task": "transcribe",
+                    "temperature": 0.0,
+                    "no_repeat_ngram_size": 2,
+                }
+            )
+            
+            original_text = result["text"].strip()
+            print(f"[TRANSCRIPTION] Transcrito: '{original_text}'")
+
+            # FILTRO BÁSICO - Solo rechazar texto vacío o muy corto
+            if len(original_text) < 1:
+                print(f"[WARN] Transcripción vacía")
+                await websocket.send_text(json.dumps({"type": "no_speech_detected"}))
+                continue
+
+            # TRADUCIR
+            print(f"[TRANSLATION] Iniciando traducción: {source_lang} -> {target_lang}")
+            translator = await pipeline_manager.get_translation_pipeline(source_lang, target_lang)
+            
+            if not translator:
+                print(f"[ERROR] No se pudo cargar traductor {source_lang}->{target_lang}")
+                await websocket.send_text(json.dumps({"type": "no_speech_detected"}))
+                continue
+            
+            translation_result = translator(original_text)
+            translated_text = translation_result[0]["translation_text"]
+            print(f"[TRANSLATION] Traducido: '{translated_text}'")
+
+            # ENVIAR RESULTADO
+            response = {
+                "type": "final_translation",
+                "original_text": original_text,
+                "translated_text": translated_text
+            }
+            await websocket.send_text(json.dumps(response))
+            print(f"[RESPONSE] Enviado al frontend: {response}")
+            
+            # Intercambiar idiomas para siguiente turno
+            print(f"[TURN END] Intercambiando idiomas: {source_lang}<->{target_lang}")
             source_lang, target_lang = target_lang, source_lang
-            print("[TURN END]")
 
     except WebSocketDisconnect:
-        print(f"[INFO] Cliente desconectado.")
+        print("[INFO] Cliente desconectado.")
     except Exception as e:
-        print(f"[FATAL ERROR] Error inesperado en el endpoint: {e}")
+        print(f"[ERROR] Error en WebSocket: {e}")
     finally:
-        print("[INFO] Limpiando y cerrando conexión.")
+        print("[INFO] Limpiando conexión WebSocket.")

@@ -10,3 +10,5 @@ numpy
 python-multipart
 sentencepiece
 sacremoses
+scipy
+librosa

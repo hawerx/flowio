@@ -1,18 +1,16 @@
 import 'package:flutter/foundation.dart';
 import 'package:logger/logger.dart';
 
-// Creamos una instancia global del logger para poder usarla en cualquier parte de la app.
+// Instancia global del logger
 final logger = Logger(
-  // Usamos PrettyPrinter para un formato de log bonito, con colores y stack traces.
   printer: PrettyPrinter(
-    methodCount: 1, // Cuántos métodos de la pila de llamadas mostrar
-    errorMethodCount: 5, // Cuántos métodos mostrar en caso de error
-    lineLength: 80, // Ancho de la línea
-    colors: true, // Logs con colores
-    printEmojis: true, // Emojis para cada nivel de log
-    dateTimeFormat: DateTimeFormat.onlyTimeAndSinceStart  // Shows only time and since app start
+    methodCount:      1,
+    errorMethodCount: 5, 
+    lineLength:       120, 
+    colors:           true, 
+    printEmojis:      true,
+    dateTimeFormat:   DateTimeFormat.onlyTimeAndSinceStart
   ),
-  // Establecemos el nivel de log. En modo debug, muestra todo.
-  // En modo release (producción), no muestra nada (level: Level.off).
+  // Si la app esta en modo debug muestra mensajes
   level: kDebugMode ? Level.debug : Level.off,
 );

@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:vad/vad.dart'; // <-- Importar el paquete VAD
+import 'package:vad/vad.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
@@ -15,11 +15,10 @@ import '../widgets/settings_controls.dart';
 import '../widgets/status_indicator.dart';
 import '../../../../core/models/message.dart';
 
-
 // [IMPORTANT!] INITIAL CONFIGURATION FOR BACKEND CONNECTION
-const bool    useLocalBackend       = true; 
-const String  localBackendIp        = "192.168.2.108";
-const String  hfBackendUrl          = "wss://TU-USUARIO-TU-SPACE.hf.space/ws/translate";
+const bool    useLocalBackend   = true;                   // Flag to use local backend or Huggin Face
+const String  localBackendIp    = "192.168.2.108";        // IPv4 para
+const String  hfBackendUrl      = "wss://hawerx-flowio-backend.hf.space/ws/translate"; // HF  backend URL
 
 // [IMPORTANT!] INITIAL CONFIG FOR ASSET PATHS
 const String  nextTurnSoundFilePath = "assets/sounds/beep.mp3"; 
@@ -33,110 +32,153 @@ class ConversationPage extends StatefulWidget {
 
 class _ConversationPageState extends State<ConversationPage> {
   
-  final AudioRecorder _audioRecorder = AudioRecorder();
-  final FlutterTts _flutterTts = FlutterTts();
-  final AudioPlayer _beepPlayer = AudioPlayer();
+  final AudioRecorder _audioRecorder  = AudioRecorder();
+  final FlutterTts    _flutterTts     = FlutterTts();
+  final AudioPlayer   _beepPlayer     = AudioPlayer();
 
 
   VadHandlerBase? _vad;
   WebSocketChannel? _channel;
   StreamSubscription? _webSocketSub;
   StreamSubscription<List<int>>? _audioStreamSub;
-
-  // Streams para los eventos del VAD, para evitar anidarlos
   StreamSubscription? _onSpeechStartSub;
   StreamSubscription? _onSpeechEndSub;
+
+  bool _isProcessingTts = false;
+  bool _isInitialized = false;
+  bool _vadIsListening = false;
+  bool _isFullyDisconnected = false; // Nuevo: para controlar estado completo
 
   @override
   void initState() {
     super.initState();
-    _initTts();
-    _initVad();
-    context.read<ConversationProvider>().addListener(_onStateChange);
-    _loadBeepSound();
-    logger.i("ConversationPage inicializada.");
+    _initializeApp();
+  }
+
+  Future<void> _initializeApp() async {
+    try {
+      await _initTts();
+      await _initVad();
+      await _loadBeepSound();
+      context.read<ConversationProvider>().addListener(_onStateChange);
+      _isInitialized = true;
+      logger.i("✅ ConversationPage inicializada");
+    } catch (e, stackTrace) {
+      logger.e("Error inicializando", error: e, stackTrace: stackTrace);
+    }
   }
 
   Future<void> _initVad() async {
     try {
-      _vad = VadHandler.create(isDebug: true);
-      // Setteamos los listeners
+      // Limpiar VAD previo si existe
+      if (_vad != null) {
+        await _cleanupVad();
+      }
+      
+      _vad = VadHandler.create(isDebug: false);
+      
       _onSpeechStartSub = _vad?.onRealSpeechStart.listen((_) {
-        _onSpeechStartDetected();
+        if (_vadIsListening && !_isProcessingTts && _isInitialized && !_isFullyDisconnected) {
+          logger.i("🎤 VAD: Inicio de habla detectado");
+        }
       });
-       _onSpeechEndSub = _vad?.onSpeechEnd.listen((_) {
-        _onSpeechEndDetected();
+      
+      _onSpeechEndSub = _vad?.onSpeechEnd.listen((_) {
+        if (_vadIsListening && !_isProcessingTts && _isInitialized && !_isFullyDisconnected) {
+          logger.i("🛑 VAD: Fin de habla detectado");
+          _onSpeechEndDetected();
+        }
       });
 
-      logger.i("VAD configurado correctamente.");
+      logger.i("✅ VAD configurado");
     } catch (e, stackTrace) {
-      logger.e("Error al configurar VAD.", error: e, stackTrace: stackTrace);
+      logger.e("Error configurando VAD", error: e, stackTrace: stackTrace);
+    }
+  }
+
+  Future<void> _cleanupVad() async {
+    try {
+      logger.i("🧹 Limpiando VAD anterior...");
+      
+      await _onSpeechStartSub?.cancel();
+      await _onSpeechEndSub?.cancel();
+      _onSpeechStartSub = null;
+      _onSpeechEndSub = null;
+      
+      if (_vad != null && _vadIsListening) {
+        await _vad!.stopListening();
+      }
+      
+      _vadIsListening = false;
+      _vad = null;
+      
+      logger.i("✅ VAD anterior limpiado");
+    } catch (e) {
+      logger.e("Error limpiando VAD", error: e);
     }
   }
 
   Future<void> _initTts() async {
-    
-  // [LA CLAVE DE TODO] Esta línea le dice al plugin que el Future de 'speak'
-  // solo debe completarse cuando la locución haya terminado.
-  await _flutterTts.awaitSpeakCompletion(true);
-
-  _flutterTts.setErrorHandler((msg) {
-    logger.e("Error en el motor TTS: $msg");
-    // Aunque tengamos el await, si el motor da un error,
-    // es bueno tener un log para saber qué ha pasado.
-  });
-  
-  logger.i("Motor TTS configurado para esperar la finalización.");
+    try {
+      await _flutterTts.setLanguage("es-ES");
+      await _flutterTts.setSpeechRate(0.5);
+      await _flutterTts.setVolume(1.0);
+      await _flutterTts.setPitch(1.0);
+      logger.i("✅ TTS inicializado");
+    } catch (e, stackTrace) {
+      logger.e("Error inicializando TTS", error: e, stackTrace: stackTrace);
+    }
   }
-  
 
   Future<void> _loadBeepSound() async {
     try {
       await _beepPlayer.setAsset(nextTurnSoundFilePath);
-      logger.i("Sonido 'beep.mp3' cargado correctamente.");
+      logger.i("✅ Beep cargado");
     } catch (e) {
-      logger.e("No se pudo cargar 'beep.mp3'. Asegúrate de que el archivo existe en assets/sounds/", error: e);
+      logger.e("Error cargando beep", error: e);
     }
   }
 
   void _onStateChange() {
     if (!mounted) return;
     final provider = context.read<ConversationProvider>();
-    logger.d("Cambio de estado detectado. isConversing: ${provider.isConversing}, _channel: ${_channel == null ? 'nulo' : 'activo'}");
-    if (provider.isConversing && _channel == null) {
+    
+    if (provider.isConversing && (_channel == null || _isFullyDisconnected)) {
+      logger.i("🚀 Iniciando nueva conversación...");
+      _isFullyDisconnected = false;
       _connectAndStart();
     } else if (!provider.isConversing && _channel != null) {
+      logger.i("🛑 Deteniendo conversación...");
       _disconnect();
     }
   }
-  
+
   Future<void> _connectAndStart() async {
-    logger.i("Solicitando permiso de micrófono...");
+    // PASO 1: Limpiar completamente todo estado previo
+    await _forceCleanupAll();
+    
     final status = await Permission.microphone.request();
-    if (!mounted) return;
-    if (!status.isGranted) {
-      logger.w("Permiso de micrófono denegado.");
+    if (!mounted || !status.isGranted) {
       context.read<ConversationProvider>().stopConversation();
       return;
     }
-    logger.i("Permiso de micrófono concedido.");
-    
+
     final provider = context.read<ConversationProvider>();
-    final url = useLocalBackend ? "ws://$localBackendIp:8000/ws/translate_stream" : hfBackendUrl;
+    final url = "ws://$localBackendIp:8000/ws/translate_stream";
 
     try {
-      logger.i("Conectando a WebSocket: $url");
+      logger.i("🔗 Conectando a WebSocket...");
       _channel = WebSocketChannel.connect(Uri.parse(url));
       await _channel!.ready;
-      logger.i("Conexión WebSocket establecida.");
 
-      _webSocketSub = _channel!.stream.listen(_onMessageReceived, 
-        onError: (err, stackTrace) {
-          logger.e("Error en el stream del WebSocket.", error: err, stackTrace: stackTrace);
+      _webSocketSub = _channel!.stream.listen(
+        _onMessageReceived,
+        onError: (err) {
+          logger.e("Error WebSocket", error: err);
           _disconnect();
-        }, 
+        },
         onDone: () {
-          logger.i("Stream del WebSocket finalizado (onDone).");
+          logger.i("WebSocket cerrado");
           _disconnect();
         }
       );
@@ -146,208 +188,405 @@ class _ConversationPageState extends State<ConversationPage> {
         "source_lang": provider.sourceLang.code,
         "target_lang": provider.targetLang.code,
       };
-      logger.i("Enviando configuración inicial al backend: ${jsonEncode(config)}");
       _channel!.sink.add(jsonEncode(config));
+      logger.i("✅ WebSocket conectado y configurado");
       
+      // PASO 2: Reinicializar VAD completamente
+      await _reinitializeVad();
+      
+      // PASO 3: Iniciar ciclo
       _startListeningCycle();
     } catch (e, stackTrace) {
-      logger.e("Fallo al conectar o configurar el WebSocket.", error: e, stackTrace: stackTrace);
+      logger.e("Error conectando WebSocket", error: e, stackTrace: stackTrace);
       if (mounted) provider.stopConversation();
     }
   }
-  
-  Future<void> _disconnect() async {
-    logger.i("Iniciando proceso de desconexión...");
 
-    await _vad?.stopListening();
-    _onSpeechStartSub?.cancel();
-    _onSpeechEndSub?.cancel();
-    logger.d("VAD detenido.");
-
-    await _audioStreamSub?.cancel();
-    logger.d("Suscripción al stream de audio cancelada.");
-
-    if (await _audioRecorder.isRecording()) {
-      await _audioRecorder.stop();
-      logger.d("Grabación de audio detenida.");
+  Future<void> _forceCleanupAll() async {
+    logger.i("🧹 LIMPIEZA COMPLETA FORZADA...");
+    
+    _isProcessingTts = false;
+    _vadIsListening = false;
+    
+    // Detener TTS
+    try {
+      await _flutterTts.stop();
+    } catch (e) {
+      logger.w("Error deteniendo TTS", error: e);
     }
     
-    _webSocketSub?.cancel();
-    logger.d("Suscripción a WebSocket cancelada.");
-    _channel?.sink.close();
-    logger.d("Sink de WebSocket cerrado.");
-    _flutterTts.stop();
-    logger.d("TTS detenido.");
-
-    if(mounted && context.read<ConversationProvider>().isConversing) {
-        logger.w("La conversación seguía activa, forzando detención en el provider.");
-        context.read<ConversationProvider>().stopConversation();
+    // Limpiar audio completamente
+    await _cleanupAudioResources();
+    
+    // Limpiar WebSocket
+    await _webSocketSub?.cancel();
+    _webSocketSub = null;
+    
+    if (_channel != null) {
+      try {
+        await _channel!.sink.close();
+      } catch (e) {
+        logger.w("Error cerrando WebSocket", error: e);
+      }
+      _channel = null;
     }
-    _channel = null;
-    logger.i("Desconexión completada.");
+    
+    // Dar tiempo para que se liberen recursos
+    await Future.delayed(const Duration(milliseconds: 500));
+    
+    logger.i("✅ Limpieza completa terminada");
+  }
+
+  Future<void> _reinitializeVad() async {
+    logger.i("🔄 Reinicializando VAD completamente...");
+    
+    // Limpiar VAD anterior
+    await _cleanupVad();
+    
+    // Esperar liberación de recursos
+    await Future.delayed(const Duration(milliseconds: 300));
+    
+    // Reinicializar VAD
+    await _initVad();
+    
+    logger.i("✅ VAD reinicializado");
   }
 
   Future<void> _startListeningCycle() async {
-    if (!mounted || !context.read<ConversationProvider>().isConversing) return;
+    if (!mounted || !_isInitialized || !context.read<ConversationProvider>().isConversing || _isFullyDisconnected) {
+      logger.w("❌ No se puede iniciar ciclo");
+      return;
+    }
     
     final ctx = context.read<ConversationProvider>();
+    logger.i("🎯 INICIANDO CICLO PARA: ${ctx.currentSpeaker}");
 
-    logger.i("Iniciando ciclo de escucha para: ${ctx.currentSpeaker}");
+    // Limpiar recursos de audio previos
+    await _cleanupAudioResources();
+    _isProcessingTts = false;
     
-    // Añadimos un mensaje temporal al historial que se actualizará con la respuesta
+    // Añadir mensaje temporal
     ctx.addMessage(Message(
       id: DateTime.now().toIso8601String(),
       isFromSource: ctx.currentSpeaker == 'source',
-      originalText: "Procesando...",
+      originalText: "Escuchando...",
       translatedText: "..."
     ));
-  
-    // Simplemente empezamos a escuchar con el VAD. Los listeners ya están activos.
-    _vad?.startListening();
-  }
 
-  Future<void> _onSpeechStartDetected() async {
-    
-    if (!mounted || !(context.read<ConversationProvider>().isListening)) return;
+    // Delay para estabilización
+    await Future.delayed(const Duration(milliseconds: 400));
 
-    logger.d("VAD detectó inicio de habla. Iniciando grabación de audio...");
-    
-    const recordConfig = RecordConfig(encoder: AudioEncoder.pcm16bits, sampleRate: 16000, numChannels: 1);
-    
-    if (await _audioRecorder.isRecording()) {
-      await _audioRecorder.stop();
+    // Verificar que no se haya detenido la conversación
+    if (!mounted || !context.read<ConversationProvider>().isConversing || _isFullyDisconnected) {
+      return;
     }
-    await _audioStreamSub?.cancel();
 
-    _audioStreamSub = (await _audioRecorder.startStream(recordConfig)).listen(
-      (data) {
-    if (_channel != null && data.isNotEmpty) {
-        _channel!.sink.add(data);
+    // Iniciar grabación continua
+    await _startContinuousRecording();
+    
+    // Delay antes de iniciar VAD
+    await Future.delayed(const Duration(milliseconds: 300));
+    
+    // INICIAR VAD PARA ESTE TURNO
+    if (mounted && context.read<ConversationProvider>().isConversing && !_isFullyDisconnected) {
+      await _startVadForTurn();
+    }
+  }
+
+  Future<void> _startVadForTurn() async {
+    try {
+      if (_vad != null && !_vadIsListening && !_isFullyDisconnected) {
+        await _vad!.startListening();
+        _vadIsListening = true;
+        logger.i("✅ VAD iniciado para turno actual");
       }
-      },
-      onError: (err, stackTrace) => logger.e("Error en stream de grabación.", error: err, stackTrace: stackTrace)
+    } catch (e) {
+      logger.e("Error iniciando VAD", error: e);
+    }
+  }
+
+  Future<void> _stopVadForTurn() async {
+    try {
+      if (_vad != null && _vadIsListening) {
+        await _vad!.stopListening();
+        _vadIsListening = false;
+        logger.i("🛑 VAD detenido para turno completado");
+      }
+    } catch (e) {
+      logger.e("Error deteniendo VAD", error: e);
+    }
+  }
+
+  Future<void> _startContinuousRecording() async {
+    const recordConfig = RecordConfig(
+      encoder: AudioEncoder.pcm16bits, 
+      sampleRate: 16000, 
+      numChannels: 1,
     );
-  }
-  
-  Future<void> _onSpeechEndDetected() async {
-
-     if (!mounted || context.read<ConversationProvider>().isProcessing) return;
     
-    // Para evitar múltiples llamadas, cancelamos la suscripción de audio inmediatamente
-    logger.d("VAD detectó fin de habla.");
-
-    await _audioRecorder.stop();
-    await _audioStreamSub?.cancel();
-    _audioStreamSub = null;
-    //await _vad?.stopListening();
-    
-    // No detenemos el VAD aquí, solo la grabación de audio.
-    // El VAD sigue escuchando por si hay más turnos.
-
-    if (!context.read<ConversationProvider>().isConversing) return;
-
-    context.read<ConversationProvider>().setProcessing();
-    _channel?.sink.add(jsonEncode({"event": "end_of_speech"}));
-     
-  }
-  
-  void _onMessageReceived(dynamic message) {
-    if (!mounted) return;
-    logger.i("Mensaje recibido del backend: $message");
-    final data = jsonDecode(message);
-    final provider = context.read<ConversationProvider>();
-    
-    switch (data['type']) {
-      case 'final_translation':
-        provider.updateLastMessage(
-          originalText: data['original_text'],
-          translatedText: data['translated_text']
-        );
-        _speakTextAndProceed(data['translated_text']);
-        break;
+    try {
+      // FORZAR cierre de grabación previa con más tiempo
+      bool wasRecording = await _audioRecorder.isRecording();
+      if (wasRecording) {
+        logger.w("🛑 FORZANDO cierre de grabación previa...");
+        await _audioRecorder.stop();
+        
+        // Esperar más tiempo para asegurar liberación completa
+        await Future.delayed(const Duration(milliseconds: 800));
+        
+        // Verificar nuevamente
+        if (await _audioRecorder.isRecording()) {
+          logger.e("❌ No se pudo detener grabación previa");
+          return;
+        }
+      }
       
-      case 'no_speech_detected':
-        logger.i("Backend no detectó habla. Eliminando mensaje temporal y pasando turno.");
-        provider.removeLastMessage();
-        _nextTurn();
-        break;
+      // Verificar estado antes de iniciar
+      if (_isFullyDisconnected || !mounted || !context.read<ConversationProvider>().isConversing) {
+        logger.w("❌ Conversación detenida, no iniciar grabación");
+        return;
+      }
+      
+      logger.i("🎙️ Iniciando NUEVA grabación de audio...");
+      
+      // Iniciar stream de audio
+      final audioStream = await _audioRecorder.startStream(recordConfig);
+      _audioStreamSub = audioStream.listen(
+        (data) {
+          if (_channel != null && data.isNotEmpty && mounted && _vadIsListening && !_isFullyDisconnected) {
+            _channel!.sink.add(data);
+          }
+        },
+        onError: (err) {
+          if (!_isFullyDisconnected) {
+            logger.e("❌ Error en stream de audio", error: err);
+          }
+        },
+        onDone: () {
+          if (!_isFullyDisconnected) {
+            logger.i("🏁 Stream de audio terminado");
+          }
+        }
+      );
+      
+      logger.i("✅ Grabación continua iniciada correctamente");
+      
+    } catch (e, stackTrace) {
+      logger.e("❌ Error iniciando grabación", error: e, stackTrace: stackTrace);
+    }
+  }
 
-      default:
-        logger.w("Mensaje de tipo desconocido recibido: ${data['type']}");
-        _nextTurn();
+  Future<void> _cleanupAudioResources() async {
+    try {
+      logger.i("🧹 Limpiando recursos de audio...");
+      
+      // DETENER VAD PRIMERO
+      await _stopVadForTurn();
+      
+      // Cancelar stream subscription
+      if (_audioStreamSub != null) {
+        await _audioStreamSub!.cancel();
+        _audioStreamSub = null;
+        logger.d("✅ Stream subscription cancelado");
+      }
+      
+      // Detener grabación con verificación extra
+      if (await _audioRecorder.isRecording()) {
+        await _audioRecorder.stop();
+        logger.d("✅ Grabación detenida");
+        
+        // Esperar para asegurar liberación
+        await Future.delayed(const Duration(milliseconds: 200));
+      }
+      
+      logger.i("🧹 Recursos de audio limpiados");
+      
+    } catch (e) {
+      logger.e("❌ Error limpiando recursos", error: e);
+    }
+  }
+
+  Future<void> _onSpeechEndDetected() async {
+    if (!mounted || !context.read<ConversationProvider>().isConversing || _isProcessingTts || _isFullyDisconnected) {
+      return;
+    }
+    
+    logger.i("⏹️ Procesando fin de habla...");
+    
+    // DETENER VAD INMEDIATAMENTE
+    await _stopVadForTurn();
+    
+    // Esperar el tiempo de silencio configurado
+    final silenceDuration = context.read<ConversationProvider>().silenceDuration;
+    await Future.delayed(Duration(milliseconds: (silenceDuration * 1000).round()));
+    
+    if (!mounted || !context.read<ConversationProvider>().isConversing || _isFullyDisconnected) return;
+
+    // Detener grabación
+    await _cleanupAudioResources();
+    context.read<ConversationProvider>().setProcessing();
+    
+    // Enviar señal de fin de habla al backend
+    if (_channel != null && !_isFullyDisconnected) {
+      _channel!.sink.add(jsonEncode({"event": "end_of_speech"}));
+      logger.i("📤 Señal 'end_of_speech' enviada");
+    }
+  }
+
+  void _onMessageReceived(dynamic message) {
+    if (!mounted || !_isInitialized || _isFullyDisconnected) return;
+    
+    try {
+      final data = jsonDecode(message);
+      final provider = context.read<ConversationProvider>();
+      
+      logger.i("📨 Mensaje: ${data['type']}");
+      
+      switch (data['type']) {
+        case 'final_translation':
+          final originalText = data['original_text'] ?? '';
+          final translatedText = data['translated_text'] ?? '';
+          
+          if (originalText.isNotEmpty && translatedText.isNotEmpty) {
+            logger.i("✅ Traducción: '$originalText' -> '$translatedText'");
+            provider.updateLastMessage(
+              originalText: originalText,
+              translatedText: translatedText
+            );
+            _speakTextAndProceed(translatedText);
+          } else {
+            logger.w("❌ Traducción vacía");
+            provider.removeLastMessage();
+            _startListeningCycle();
+          }
+          break;
+        
+        case 'no_speech_detected':
+          logger.w("❌ No se detectó habla válida");
+          provider.removeLastMessage();
+          _startListeningCycle();
+          break;
+          
+        default:
+          logger.w("❓ Mensaje desconocido: ${data['type']}");
+          provider.removeLastMessage();
+          _startListeningCycle();
+      }
+    } catch (e, stackTrace) {
+      logger.e("Error procesando mensaje", error: e, stackTrace: stackTrace);
+      context.read<ConversationProvider>().removeLastMessage();
+      _startListeningCycle();
     }
   }
 
   Future<void> _speakTextAndProceed(String textToSpeak) async {
-  if (!mounted) return;
-  
-  final provider = context.read<ConversationProvider>();
-  final targetLang = provider.currentSpeaker == 'source' 
-      ? provider.targetLang.code 
-      : provider.sourceLang.code;
-
-  if (textToSpeak.trim().isEmpty) {
-    logger.w("El texto para TTS está vacío. Saltando al siguiente turno directamente.");
-    _nextTurn();
-    return;
-  }
-
-  logger.i("Iniciando TTS para el texto: '$textToSpeak' en idioma '$targetLang'");
-  
-  try {
-    // [EL GRAN CAMBIO] Disparamos el TTS pero NO lo esperamos (fire and forget).
-    _flutterTts.setLanguage(targetLang);
+    if (!mounted || !_isInitialized || textToSpeak.trim().isEmpty || _isFullyDisconnected) {
+      _nextTurn();
+      return;
+    }
     
-    // Gracias a 'awaitSpeakCompletion(true)', este await ahora sí funciona
-    // y esperará a que la voz termine de reproducirse.
-    await _flutterTts.speak(textToSpeak);
-
-    // Inmediatamente después, procedemos al siguiente turno.
-    // Esto desacopla la finalización del TTS del flujo principal de la conversación.
-    logger.i("TTS iniciado (sin esperar). Procediendo al siguiente turno.");
-    _nextTurn();
-
-  } catch (e, stackTrace) {
-    logger.e("Error al iniciar TTS. Forzando el paso al siguiente turno.", error: e, stackTrace: stackTrace);
-    // Aunque no esperamos, el 'speak' podría fallar al iniciarse.
-    // Si eso ocurre, nos aseguramos de continuar el flujo.
-    _nextTurn();
-  }
-}
-
- Future<void> _nextTurn() async {
-  if (!mounted || !context.read<ConversationProvider>().isConversing) {
-    logger.w("Se intentó pasar al siguiente turno, pero la conversación ya no está activa. Abortando.");
-    return;
-  }
+    logger.i("🔊 TTS: '$textToSpeak'");
+    _isProcessingTts = true;
     
-  logger.i("Reproduciendo sonido de cambio de turno.");
-  try {
-    await _beepPlayer.seek(Duration.zero);
-    await _beepPlayer.play();
-  } catch (e, stackTrace) {
-    logger.e("Error al reproducir el sonido de beep.", error: e, stackTrace: stackTrace);
+    final provider = context.read<ConversationProvider>();
+    final targetLang = provider.currentSpeaker == 'source' 
+        ? provider.targetLang.code 
+        : provider.sourceLang.code;
+
+    try {
+      await _flutterTts.setLanguage(targetLang);
+      await _flutterTts.speak(textToSpeak);
+      await _flutterTts.awaitSpeakCompletion(true);
+
+      logger.i("✅ TTS completado");
+    } catch (e, stackTrace) {
+      logger.e("Error en TTS", error: e, stackTrace: stackTrace);
+    }
+    
+    _isProcessingTts = false;
+    
+    if (mounted && context.read<ConversationProvider>().isConversing && !_isFullyDisconnected) {
+      _nextTurn();
+    }
   }
 
-  if (!mounted) return; // Comprobar de nuevo después del delay
-  
-  // Cambiamos el estado en el provider.
-  context.read<ConversationProvider>().switchTurn();
+  Future<void> _nextTurn() async {
+    if (!mounted || !context.read<ConversationProvider>().isConversing || _isFullyDisconnected) return;
+    
+    logger.i("🔄 CAMBIANDO TURNO");
+    
+    // Reproducir beep
+    try {
+      await _beepPlayer.seek(Duration.zero);
+      _beepPlayer.play();
+      logger.i("🔔 Beep reproducido");
+    } catch (e) {
+      logger.w("Error beep", error: e);
+    }
+    
+    // Esperar
+    await Future.delayed(const Duration(milliseconds: 1000));
+    
+    if (!mounted || !context.read<ConversationProvider>().isConversing || _isFullyDisconnected) return;
+    
+    // Cambiar turno
+    context.read<ConversationProvider>().switchTurn();
+    logger.i("✅ Turno cambiado");
+    
+    // Esperar un poco más
+    await Future.delayed(const Duration(milliseconds: 500));
+    
+    // INICIAR NUEVO CICLO
+    if (mounted && context.read<ConversationProvider>().isConversing && !_isFullyDisconnected) {
+      logger.i("🔄 Iniciando nuevo ciclo de escucha...");
+      _startListeningCycle();
+    }
+  }
 
-  // Iniciamos el ciclo de escucha para el nuevo turno.
-  _startListeningCycle();
-}
+  Future<void> _disconnect() async {
+    logger.i("🔌 Desconectando COMPLETAMENTE...");
+    
+    _isFullyDisconnected = true;
+    _isProcessingTts = false;
+    _vadIsListening = false;
+    
+    // Detener TTS
+    try {
+      await _flutterTts.stop();
+    } catch (e) {
+      logger.w("Error deteniendo TTS", error: e);
+    }
+    
+    // Limpiar todos los recursos
+    await _cleanupAudioResources();
+    await _cleanupVad();
+    
+    // Limpiar WebSocket
+    await _webSocketSub?.cancel();
+    _webSocketSub = null;
+    
+    if (_channel != null) {
+      try {
+        await _channel!.sink.close();
+      } catch (e) {
+        logger.w("Error cerrando WebSocket", error: e);
+      }
+      _channel = null;
+    }
+
+    if (mounted) {
+      final provider = context.read<ConversationProvider>();
+      if (provider.isConversing) {
+        provider.stopConversation();
+      }
+    }
+    
+    logger.i("✅ Desconectado COMPLETAMENTE");
+  }
 
   @override
   void dispose() {
-    logger.i("Realizando limpieza de Conversation Page...");
-    _onSpeechStartSub?.cancel();
-    _onSpeechEndSub?.cancel();
     _disconnect();
-    _vad?.dispose();
-    _beepPlayer.dispose();
-    _audioRecorder.dispose();
-    _flutterTts.stop();
     super.dispose();
   }
 
