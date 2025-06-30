@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'core/providers/conversation_provider.dart';
-import 'features/pages/conversation_page.dart';
+import 'features/conversation/providers/conversation_provider.dart';
+import 'features/conversation/ui/pages/conversation_page.dart';
 
 void main() {
   runApp(
@@ -15,20 +15,15 @@ void main() {
 class FlowioApp extends StatelessWidget {
   const FlowioApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flowio',
-      theme: ThemeData(
-        brightness: Brightness.light,
-        primarySwatch: Colors.blue,
-        fontFamily: 'Inter',
+      title: 'Flowio Translator',
+      theme: ThemeData.light(useMaterial3: true).copyWith(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
       ),
-      darkTheme: ThemeData(
-        brightness: Brightness.dark,
-        primarySwatch: Colors.blue,
-        fontFamily: 'Inter',
+      darkTheme: ThemeData.dark(useMaterial3: true).copyWith(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue, brightness: Brightness.dark),
       ),
       themeMode: ThemeMode.system,
       home: const ConversationPage(),
