@@ -36,7 +36,30 @@ class ConversationProvider extends ChangeNotifier {
     isListening = false;
     isProcessing = false;
     currentSpeaker = null;
+
+    // Limpiar solo mensajes temporales que no tienen contenido real
+    _cleanupTemporaryMessages();
+    
     notifyListeners();
+  }
+
+  // Función mejorada para limpiar solo mensajes temporales sin contenido real
+  void _cleanupTemporaryMessages() {
+    history.removeWhere((message) {
+      // Eliminar si:
+      // 1. Solo dice "Escuchando..." y no tiene traducción
+      // 2. Está vacío y solo tiene "..." como traducción
+      // 3. Solo dice "Escuchando..." y la traducción es "..."
+      bool isTemporary = (message.originalText == "Escuchando..." && 
+                         (message.translatedText == "..." || message.translatedText.isEmpty)) ||
+                        (message.originalText.isEmpty && message.translatedText == "...");
+      
+      if (isTemporary) {
+        logger.d("---> Eliminando mensaje temporal: '${message.originalText}' -> '${message.translatedText}'");
+      }
+      
+      return isTemporary;
+    });
   }
 
   void setSilenceDuration(double value) { 

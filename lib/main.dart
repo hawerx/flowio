@@ -18,7 +18,7 @@ class FlowioApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flowio Translator',
+      title: 'Flowio',
       theme: ThemeData.light(useMaterial3: true).copyWith(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
       ),

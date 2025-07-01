@@ -12,7 +12,6 @@ import '../../../../core/utils/logger.dart';
 import '../../providers/conversation_provider.dart';
 import '../widgets/conversation_history_view.dart';
 import '../widgets/settings_controls.dart';
-import '../widgets/status_indicator.dart';
 import '../../../../core/models/message.dart';
 
 // [IMPORTANT!] INITIAL CONFIGURATION FOR BACKEND CONNECTION
@@ -593,14 +592,42 @@ class _ConversationPageState extends State<ConversationPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Flowio Translator")),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      appBar: AppBar(
+        title: const Text(
+          "Flowio",
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        centerTitle: true,
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        foregroundColor: Theme.of(context).colorScheme.onPrimary,
+        elevation: 0,
+      ),
       body: Column(
         children: [
-          const SettingsControls(),
-          const Divider(height: 1),
-          const StatusIndicator(),
-          const Divider(height: 1),
-          Expanded(child: ConversationHistoryView()),
+          // Historial de mensajes (arriba)
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.transparent,
+              ),
+              child: ConversationHistoryView(),
+            ),
+          ),
+          // Controles (abajo) - eliminamos StatusIndicator completamente
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.transparent,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black12,
+                  blurRadius: 4,
+                  offset: Offset(0, -2),
+                ),
+              ],
+            ),
+            child: SettingsControls(),
+          ),
         ],
       ),
     );
