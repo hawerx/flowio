@@ -2,17 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/models/message.dart';
 import '../../providers/conversation_provider.dart';
+import '../../../../core/services/conversation_manager.dart';
 
-class MessageBubble extends StatefulWidget {
+class MessageBubbleNew extends StatefulWidget {
   final Message message;
 
-  const MessageBubble({super.key, required this.message});
+  const MessageBubbleNew({super.key, required this.message});
 
   @override
-  State<MessageBubble> createState() => _MessageBubbleState();
+  State<MessageBubbleNew> createState() => _MessageBubbleNewState();
 }
 
-class _MessageBubbleState extends State<MessageBubble> with TickerProviderStateMixin {
+class _MessageBubbleNewState extends State<MessageBubbleNew> with TickerProviderStateMixin {
   late AnimationController _pulseAnimationController;
   late AnimationController _spinAnimationController;
 
@@ -63,7 +64,7 @@ class _MessageBubbleState extends State<MessageBubble> with TickerProviderStateM
     String displayText = "";
     Widget microphoneWidget;
     
-    if (provider.isListening) {
+    if (provider.conversationState == ConversationState.listening) {
       // Estado: Escuchando - micrófono verde pulsante
       displayText = "Escuchando...";
       _spinAnimationController.stop();
@@ -88,7 +89,7 @@ class _MessageBubbleState extends State<MessageBubble> with TickerProviderStateM
           );
         },
       );
-    } else if (provider.isProcessing) {
+    } else if (provider.conversationState == ConversationState.processing) {
       // Estado: Procesando - micrófono rojo con animación de carga circular
       displayText = "Traduciendo...";
       _pulseAnimationController.stop();
@@ -178,7 +179,9 @@ class _MessageBubbleState extends State<MessageBubble> with TickerProviderStateM
     
     // Determinar si este mensaje debe mostrar animación
     bool isActiveMessage = _isActiveMessage(provider);
-    bool shouldShowAnimation = isActiveMessage && (provider.isListening || provider.isProcessing);
+    bool shouldShowAnimation = isActiveMessage && 
+        (provider.conversationState == ConversationState.listening || 
+         provider.conversationState == ConversationState.processing);
     bool hasRealContent = widget.message.originalText.isNotEmpty && 
                          widget.message.originalText != "Escuchando...";
     bool hasTranslation = widget.message.translatedText.isNotEmpty && 

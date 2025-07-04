@@ -37,10 +37,23 @@ class Constants {
   static const double ttsDefaultSpeechRate  = 0.5;
   static const double ttsDefaultVolume      = 1.0;
   static const double ttsDefaultPitch       = 1.0;
+
+// ===========================================================
+//                    TIMING SETTINGS
+// ===========================================================
+
+  static const int stabilizationDelayMs     = 400;
+  static const int vadStartDelayMs          = 300;
+  static const int audioCleanupDelayMs      = 200;
+  static const int resourceCleanupDelayMs   = 500;
+  static const int forceStopDelayMs         = 800;
+  static const int turnChangeDelayMs        = 1000;
+  static const int nextTurnDelayMs          = 500;
+  static const int vadReinitDelayMs         = 300;
 }
 
 // ===========================================================
 //                    TIME DELAYS FUNCTION
 // ===========================================================
-  // Just a Future.delayed wrapper
-  Future<dynamic> delay (int millisecs) async => Future.delayed(Duration(milliseconds: millisecs ));
+/// Función de utilidad para delays
+Future<void> delay(int millisecs) async => Future.delayed(Duration(milliseconds: millisecs));

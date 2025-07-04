@@ -3,8 +3,8 @@ import 'package:provider/provider.dart';
 import '../../providers/conversation_provider.dart';
 import '../../../../core/models/language.dart';
 
-class SettingsControls extends StatelessWidget {
-  const SettingsControls({super.key});
+class SettingsControlsNew extends StatelessWidget {
+  const SettingsControlsNew({super.key});
 
   @override
   Widget build(BuildContext context) {
