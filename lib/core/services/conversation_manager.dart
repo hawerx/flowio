@@ -32,6 +32,11 @@ class ConversationManager {
   bool _isFullyDisconnected = false;
   String? _currentSpeaker;
   bool _isAudioStreamActive = false; // Para controlar envío de audio como en código original
+  bool _speechDetected = false; // 🆕 Para enviar audio solo después de detectar habla
+  
+  // 🆕 Buffer de audio pre-habla para no perder el inicio del discurso
+  final List<List<int>> _preSpeechBuffer = [];
+  static const int _maxBufferSize = 30; // ~1-1.5 segundos de buffer (depende del chunk size)
 
   // Callbacks
   Function(Message)? onMessageAdded;
@@ -69,6 +74,7 @@ class ConversationManager {
   /// Configura los callbacks de los servicios
   void _setupServiceCallbacks() {
     // VAD callbacks
+    _vadService.onSpeechStart = _onSpeechStartDetected; // 🆕 Detectar inicio de habla
     _vadService.onSpeechEnd = _onSpeechEndDetected;
     
     // WebSocket callbacks
@@ -182,14 +188,26 @@ class ConversationManager {
 
     // Configurar envío de audio al WebSocket
     _audioService.setupAudioStream(audioStream, (audioData) {
-      // Replicar la lógica original: enviar mientras la sesión de audio esté activa
       if (_webSocketService.isConnected && !_isFullyDisconnected && _isAudioStreamActive) {
-        _webSocketService.sendAudioData(audioData);
+        if (_speechDetected) {
+          // 🆕 Ya se detectó habla: enviar directamente
+          _webSocketService.sendAudioData(audioData);
+        } else {
+          // 🆕 Aún no se detecta habla: almacenar en buffer circular
+          _preSpeechBuffer.add(audioData);
+          if (_preSpeechBuffer.length > _maxBufferSize) {
+            _preSpeechBuffer.removeAt(0); // Mantener solo los últimos chunks
+          }
+        }
       }
     });
 
-    // Activar stream de audio (equivale a _vadIsListening en código original)
+    // Activar stream de audio pero NO envío hasta detectar habla
     _isAudioStreamActive = true;
+    _speechDetected = false; // 🆕 Resetear bandera de detección de habla
+    _preSpeechBuffer.clear(); // 🆕 Limpiar buffer para nuevo ciclo
+
+    logger.i("🎤 Audio grabándose, almacenando en buffer hasta detectar habla...");
 
     // Delay antes de VAD
     await Future.delayed(const Duration(milliseconds: 300));
@@ -198,6 +216,25 @@ class ConversationManager {
     if (!_isFullyDisconnected) {
       await _vadService.startListening();
     }
+  }
+
+  /// 🆕 Maneja el inicio de habla detectado por VAD
+  void _onSpeechStartDetected() {
+    if (_isFullyDisconnected || _currentState != ConversationState.listening) return;
+    
+    logger.i("🎤 ¡Habla detectada! Enviando buffer pre-habla + audio actual...");
+    
+    // 🆕 Enviar todo el buffer acumulado antes de la detección de habla
+    for (final bufferedChunk in _preSpeechBuffer) {
+      if (_webSocketService.isConnected && !_isFullyDisconnected) {
+        _webSocketService.sendAudioData(bufferedChunk);
+      }
+    }
+    logger.i("📤 Enviados ${_preSpeechBuffer.length} chunks del buffer pre-habla");
+    
+    // Limpiar buffer y activar envío directo
+    _preSpeechBuffer.clear();
+    _speechDetected = true; // Ahora sí enviar audio directamente al WebSocket
   }
 
   /// Maneja el fin de habla detectado por VAD
@@ -332,6 +369,8 @@ class ConversationManager {
     logger.i("🧹 LIMPIEZA COMPLETA FORZADA...");
     
     _isAudioStreamActive = false;
+    _speechDetected = false; // 🆕 Resetear detección de habla
+    _preSpeechBuffer.clear(); // 🆕 Limpiar buffer de audio
     await _ttsService.stop();
     await _audioService.stopRecording();
     await _vadService.cleanup();
