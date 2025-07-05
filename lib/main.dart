@@ -6,7 +6,7 @@ import 'features/conversation/ui/pages/conversation_page.dart';
 void main() {
   runApp(
     ChangeNotifierProvider(
-      create: (context) => ConversationProvider(),
+      create: (_) => ConversationProvider(),
       child: const FlowioApp(),
     ),
   );
@@ -19,15 +19,23 @@ class FlowioApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Flowio',
-      theme: ThemeData.light(useMaterial3: true).copyWith(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-      ),
-      darkTheme: ThemeData.dark(useMaterial3: true).copyWith(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue, brightness: Brightness.dark),
-      ),
+      theme: _buildTheme(Brightness.light),
+      darkTheme: _buildTheme(Brightness.dark),
       themeMode: ThemeMode.system,
       home: const ConversationPage(),
       debugShowCheckedModeBanner: false,
+    );
+  }
+
+  /// Tema unificado para light/dark
+  ThemeData _buildTheme(Brightness brightness) {
+    return ThemeData(
+      useMaterial3: true,
+      brightness: brightness,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: Colors.blue,
+        brightness: brightness,
+      ),
     );
   }
 }

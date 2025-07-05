@@ -18,9 +18,10 @@ enum ConversationState {
   error
 }
 
-/// Gestor principal de la conversación que coordina todos los servicios
+/// Manager de la conversación que coordina todos los servicios definidos
 class ConversationManager {
-  // Servicios
+
+  // Servicios de los que se encarga el manager
   final AudioService _audioService = AudioService();
   final VadService _vadService = VadService();
   final TtsService _ttsService = TtsService();
@@ -31,26 +32,34 @@ class ConversationManager {
   ConversationState _currentState = ConversationState.idle;
   bool _isFullyDisconnected = false;
   String? _currentSpeaker;
-  bool _isAudioStreamActive = false; // Para controlar envío de audio como en código original
-  bool _speechDetected = false; // 🆕 Para enviar audio solo después de detectar habla
+  bool _isAudioStreamActive = false;
+  bool _speechDetected = false;
   
-  // 🆕 Buffer de audio pre-habla para no perder el inicio del discurso
+  // Buffer de audio pre-habla para no perder el inicio del discurso
   final List<List<int>> _preSpeechBuffer = [];
-  static const int _maxBufferSize = 30; // ~1-1.5 segundos de buffer (depende del chunk size)
+  static const int _maxBufferSize = 30;
 
-  // Callbacks
-  Function(Message)? onMessageAdded;
-  Function({String? originalText, String? translatedText})? onMessageUpdated;
-  Function()? onMessageRemoved;
-  Function()? onTurnChanged;
-  Function()? onStateChanged;
-  Function()? getSilenceDuration; // Callback para obtener silenceDuration
-  Function()? getTargetLanguageCode; // Callback para obtener código de idioma destino
+  // Callbacks con tipos explícitos
+  void Function(Message)? onMessageAdded;
+  void Function({String? originalText, String? translatedText})? onMessageUpdated;
+  void Function()? onMessageRemoved;
+  void Function()? onTurnChanged;
+  void Function()? onStateChanged;
+  
+  // Callbacks de configuración como funciones puras
+  double Function()? getSilenceDuration;
+  String Function()? getTargetLanguageCode;
 
   // Getters
-  ConversationState get currentState => _currentState;
-  bool get isActive => _currentState != ConversationState.idle && !_isFullyDisconnected;
-  String? get currentSpeaker => _currentSpeaker;
+  ConversationState get currentState  => _currentState;
+  String?           get currentSpeaker=> _currentSpeaker;
+  bool              get isActive      => _currentState != ConversationState.idle && !_isFullyDisconnected;
+  bool              get isListening   => _currentState == ConversationState.listening;
+  bool              get isProcessing  => _currentState == ConversationState.processing;
+  bool              get isSpeaking    => _currentState == ConversationState.speaking;
+  bool              get isConnecting  => _currentState == ConversationState.connecting;
+  bool              get hasError      => _currentState == ConversationState.error;
+  bool              get isIdle        => _currentState == ConversationState.idle;
 
   /// Inicializa todos los servicios
   Future<bool> initialize() async {
@@ -74,7 +83,7 @@ class ConversationManager {
   /// Configura los callbacks de los servicios
   void _setupServiceCallbacks() {
     // VAD callbacks
-    _vadService.onSpeechStart = _onSpeechStartDetected; // 🆕 Detectar inicio de habla
+    _vadService.onSpeechStart = _onSpeechStartDetected;
     _vadService.onSpeechEnd = _onSpeechEndDetected;
     
     // WebSocket callbacks
@@ -162,6 +171,8 @@ class ConversationManager {
     }
 
     logger.i("🎯 INICIANDO CICLO PARA: $_currentSpeaker");
+    
+    // ✅ CORRECCIÓN: Usar asignación directa en lugar de _setState
     _currentState = ConversationState.listening;
     onStateChanged?.call();
 
@@ -190,13 +201,11 @@ class ConversationManager {
     _audioService.setupAudioStream(audioStream, (audioData) {
       if (_webSocketService.isConnected && !_isFullyDisconnected && _isAudioStreamActive) {
         if (_speechDetected) {
-          // 🆕 Ya se detectó habla: enviar directamente
           _webSocketService.sendAudioData(audioData);
         } else {
-          // 🆕 Aún no se detecta habla: almacenar en buffer circular
           _preSpeechBuffer.add(audioData);
           if (_preSpeechBuffer.length > _maxBufferSize) {
-            _preSpeechBuffer.removeAt(0); // Mantener solo los últimos chunks
+            _preSpeechBuffer.removeAt(0);
           }
         }
       }
@@ -204,8 +213,8 @@ class ConversationManager {
 
     // Activar stream de audio pero NO envío hasta detectar habla
     _isAudioStreamActive = true;
-    _speechDetected = false; // 🆕 Resetear bandera de detección de habla
-    _preSpeechBuffer.clear(); // 🆕 Limpiar buffer para nuevo ciclo
+    _speechDetected = false;
+    _preSpeechBuffer.clear();
 
     logger.i("🎤 Audio grabándose, almacenando en buffer hasta detectar habla...");
 
@@ -218,13 +227,13 @@ class ConversationManager {
     }
   }
 
-  /// 🆕 Maneja el inicio de habla detectado por VAD
+  /// Maneja el inicio de habla detectado por VAD
   void _onSpeechStartDetected() {
     if (_isFullyDisconnected || _currentState != ConversationState.listening) return;
     
     logger.i("🎤 ¡Habla detectada! Enviando buffer pre-habla + audio actual...");
     
-    // 🆕 Enviar todo el buffer acumulado antes de la detección de habla
+    // Enviar todo el buffer acumulado antes de la detección de habla
     for (final bufferedChunk in _preSpeechBuffer) {
       if (_webSocketService.isConnected && !_isFullyDisconnected) {
         _webSocketService.sendAudioData(bufferedChunk);
@@ -234,7 +243,7 @@ class ConversationManager {
     
     // Limpiar buffer y activar envío directo
     _preSpeechBuffer.clear();
-    _speechDetected = true; // Ahora sí enviar audio directamente al WebSocket
+    _speechDetected = true;
   }
 
   /// Maneja el fin de habla detectado por VAD
@@ -243,16 +252,14 @@ class ConversationManager {
     
     logger.i("⏹️ Procesando fin de habla...");
     
-    // DETENER VAD INMEDIATAMENTE (igual que en el código original)
-    // PERO MANTENER EL AUDIO GRABANDO durante el período de silencio
     await _vadService.stopListening();
     logger.i("🎤 VAD detenido, pero audio sigue grabando para capturar final...");
     
     // Obtener tiempo de silencio configurado del provider
-    double silenceDuration = 2.0; // Default
+    double silenceDuration = 2.0;
     if (getSilenceDuration != null) {
       try {
-        silenceDuration = getSilenceDuration!() as double;
+        silenceDuration = getSilenceDuration!();
       } catch (e) {
         logger.w("Error obteniendo silenceDuration, usando default: $e");
       }
@@ -260,8 +267,6 @@ class ConversationManager {
     
     logger.i("⏳ Esperando ${silenceDuration}s de silencio (audio sigue grabando)...");
     
-    // Esperar el tiempo de silencio configurado (igual que en código original)
-    // IMPORTANTE: El audio sigue grabándose durante este tiempo para capturar el final
     await Future.delayed(Duration(milliseconds: (silenceDuration * 1000).round()));
     
     if (_isFullyDisconnected) return;
@@ -270,9 +275,8 @@ class ConversationManager {
     _currentState = ConversationState.processing;
     onStateChanged?.call();
     
-    // AHORA SÍ detener grabación y enviar señal (igual que código original)
     logger.i("🛑 Fin del período de silencio, deteniendo grabación y enviando al backend...");
-    _isAudioStreamActive = false; // Detener envío de audio
+    _isAudioStreamActive = false;
     await _audioService.stopRecording();
     _webSocketService.sendEndOfSpeechEvent();
   }
@@ -323,11 +327,11 @@ class ConversationManager {
     _currentState = ConversationState.speaking;
     onStateChanged?.call();
 
-    // Determinar idioma de destino usando el mismo patrón que el código original
-    String languageCode = 'es'; // Default
+    // Determinar idioma de destino
+    String languageCode = 'es';
     if (getTargetLanguageCode != null) {
       try {
-        languageCode = getTargetLanguageCode!() as String;
+        languageCode = getTargetLanguageCode!();
       } catch (e) {
         logger.w("Error obteniendo languageCode, usando default: $e");
       }
@@ -352,7 +356,7 @@ class ConversationManager {
     
     if (_isFullyDisconnected) return;
     
-    // Cambiar hablante
+    // ✅ CORRECCIÓN: Usar asignación directa en lugar de _setSpeaker
     _currentSpeaker = (_currentSpeaker == 'source') ? 'target' : 'source';
     onTurnChanged?.call();
     
@@ -369,8 +373,8 @@ class ConversationManager {
     logger.i("🧹 LIMPIEZA COMPLETA FORZADA...");
     
     _isAudioStreamActive = false;
-    _speechDetected = false; // 🆕 Resetear detección de habla
-    _preSpeechBuffer.clear(); // 🆕 Limpiar buffer de audio
+    _speechDetected = false;
+    _preSpeechBuffer.clear();
     await _ttsService.stop();
     await _audioService.stopRecording();
     await _vadService.cleanup();
