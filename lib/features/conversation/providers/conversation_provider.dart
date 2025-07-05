@@ -179,6 +179,15 @@ class ConversationProvider extends ChangeNotifier {
     notifyListeners(); 
   }
 
+  /// Intercambia los idiomas fuente y destino
+  void swapLanguages() {
+    logger.d("---> swapLanguages: ${sourceLang.name} <-> ${targetLang.name}");
+    final temp = sourceLang;
+    sourceLang = targetLang;
+    targetLang = temp;
+    notifyListeners();
+  }
+
   @override
   void dispose() {
     _conversationManager.dispose();

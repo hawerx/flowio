@@ -70,6 +70,7 @@ class SettingsControlsNew extends StatelessWidget {
 
   Widget _buildLanguageSelectors(BuildContext context, ConversationProvider provider, bool isEnabled) {
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Expanded(
           child: _buildLanguageDropdown(
@@ -83,16 +84,30 @@ class SettingsControlsNew extends StatelessWidget {
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primaryContainer,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              Icons.swap_horiz,
-              color: Theme.of(context).colorScheme.onPrimaryContainer,
-              size: 20,
+          child: Padding(
+            padding: const EdgeInsets.only(top: 20), // Alineación vertical con los dropdowns
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: isEnabled ? () => provider.swapLanguages() : null,
+                borderRadius: BorderRadius.circular(20),
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: isEnabled 
+                        ? Theme.of(context).colorScheme.primaryContainer
+                        : Theme.of(context).colorScheme.surfaceContainerHighest,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.swap_horiz,
+                    color: isEnabled 
+                        ? Theme.of(context).colorScheme.onPrimaryContainer
+                        : Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                    size: 20,
+                  ),
+                ),
+              ),
             ),
           ),
         ),

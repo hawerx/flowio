@@ -9,7 +9,7 @@ from transformers import pipeline as hf_pipeline
 import torch
 from typing import Dict
 
-# --- Configuración Inicial y Carga de Modelos (Sin cambios) ---
+# Configuración inicial y carga de modelos
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"Usando dispositivo: {DEVICE}")
 
