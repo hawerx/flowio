@@ -3,12 +3,13 @@ import '../../../core/models/language.dart';
 import '../../../core/models/message.dart';
 import '../../../core/services/conversation_manager.dart';
 import '../../../core/utils/logger.dart';
+import '../../../core/constants/language_constants.dart';
 
 class ConversationProvider extends ChangeNotifier {
   // Configuración
-  double silenceDuration = 2.0;
-  Language sourceLang = availableLanguages[1]; // Español
-  Language targetLang = availableLanguages[0]; // Inglés
+  double silenceDuration = 1.0;
+  Language sourceLang = LanguageConstants.defaultSourceLanguage; // Español
+  Language targetLang = LanguageConstants.defaultTargetLanguage; // Inglés
 
   // Estado de conversación
   ConversationState _currentState = ConversationState.idle;
@@ -19,15 +20,8 @@ class ConversationProvider extends ChangeNotifier {
   final ConversationManager _conversationManager = ConversationManager();
   bool _isInitialized = false;
 
-  // Idiomas disponibles
-  static const List<Language> availableLanguages = [
-    Language('en', 'Inglés'), 
-    Language('es', 'Español'), 
-    Language('fr', 'Francés'),
-    Language('de', 'Alemán'), 
-    Language('it', 'Italiano'), 
-    Language('pt', 'Portugués'),
-  ];
+  // Idiomas disponibles (ahora desde constantes)
+  static List<Language> get availableLanguages => LanguageConstants.allSupportedLanguages;
 
   // Getters
   bool get isConversing => _currentState != ConversationState.idle;

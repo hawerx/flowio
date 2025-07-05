@@ -50,6 +50,13 @@ class Constants {
   static const int turnChangeDelayMs        = 1000;
   static const int nextTurnDelayMs          = 500;
   static const int vadReinitDelayMs         = 300;
+
+// ===========================================================
+//                    LANGUAGE SETTINGS
+// ===========================================================
+  
+  // Nota: Los idiomas soportados están definidos en language_constants.dart
+  // para mejor organización y mantenimiento del código.
 }
 
 // ===========================================================

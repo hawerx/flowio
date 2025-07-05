@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/conversation_provider.dart';
 import '../../../../core/models/language.dart';
+import '../../../../core/constants/language_constants.dart';
+import 'language_selection_popup.dart';
 
 class SettingsControlsNew extends StatelessWidget {
   const SettingsControlsNew({super.key});
@@ -155,38 +157,77 @@ class SettingsControlsNew extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: Theme.of(context).colorScheme.outline.withValues(alpha:0.3),
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: isEnabled ? () => _showLanguageSelection(
+              context, 
+              label, 
+              value, 
+              onChanged, 
+              icon
+            ) : null,
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              height: 56,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: isEnabled 
+                    ? Theme.of(context).colorScheme.surfaceContainerHighest
+                    : Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Bandera del idioma (sin fondo)
+                  Text(
+                    LanguageConstants.getLanguageFlag(value.code),
+                    style: const TextStyle(fontSize: 20),
+                  ),
+                  const SizedBox(width: 8),
+                  // Nombre del idioma (sin mostrar código)
+                  Flexible(
+                    child: Text(
+                      value.name,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: isEnabled 
+                            ? Theme.of(context).colorScheme.onSurface
+                            : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
+                      ),
+                      textAlign: TextAlign.center,
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-          child: DropdownButton<Language>(
-            value: value,
-            onChanged: isEnabled ? (Language? newValue) => onChanged(newValue!) : null,
-            underline: const SizedBox(),
-            isExpanded: true,
-            icon: Icon(
-              Icons.keyboard_arrow_down,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-            items: ConversationProvider.availableLanguages.map<DropdownMenuItem<Language>>((Language lang) {
-              return DropdownMenuItem<Language>(
-                value: lang,
-                child: Text(lang.name),
-              );
-            }).toList(),
           ),
         ),
       ],
+    );
+  }
+
+  Future<void> _showLanguageSelection(
+    BuildContext context,
+    String label,
+    Language currentLanguage,
+    void Function(Language) onChanged,
+    IconData icon,
+  ) async {
+    await showLanguageSelectionPopup(
+      context: context,
+      currentLanguage: currentLanguage,
+      onLanguageSelected: onChanged,
+      title: label,
+      titleIcon: icon,
     );
   }
 
@@ -236,9 +277,9 @@ class SettingsControlsNew extends StatelessWidget {
           ),
           child: Slider(
             value: provider.silenceDuration,
-            min: 1.0,
-            max: 5.0,
-            divisions: 8,
+            min: 0.5,
+            max: 3.0,
+            divisions: 10,
             onChanged: isEnabled ? (double value) => provider.setSilenceDuration(value) : null,
           ),
         ),
@@ -248,19 +289,20 @@ class SettingsControlsNew extends StatelessWidget {
 
   Widget _buildControlButton(BuildContext context, ConversationProvider provider) {
     final isConversing = provider.isConversing;
+    final colorScheme = Theme.of(context).colorScheme;
     
     return Container(
       height: 56,
       decoration: BoxDecoration(
+        color: isConversing
+            ? Colors.red.shade600
+            : colorScheme.primaryContainer,
         borderRadius: BorderRadius.circular(16),
-        gradient: LinearGradient(
-          colors: isConversing
-              ? [Colors.red.shade600, Colors.red.shade700]
-              : [Colors.green.shade600, Colors.green.shade700],
-        ),
         boxShadow: [
           BoxShadow(
-            color: (isConversing ? Colors.red : Colors.green).withValues(alpha:0.3),
+            color: isConversing 
+                ? Colors.red.withValues(alpha: 0.3)
+                : colorScheme.primary.withValues(alpha: 0.3),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -280,16 +322,20 @@ class SettingsControlsNew extends StatelessWidget {
               children: [
                 Icon(
                   isConversing ? Icons.stop_circle : Icons.play_circle,
-                  color: Colors.white,
+                  color: isConversing 
+                      ? Colors.white 
+                      : colorScheme.onPrimaryContainer,
                   size: 28,
                 ),
                 const SizedBox(width: 12),
                 Text(
                   isConversing ? "Detener Conversación" : "Iniciar Conversación",
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                    color: isConversing 
+                        ? Colors.white 
+                        : colorScheme.onPrimaryContainer,
                   ),
                 ),
               ],
