@@ -1,16 +1,12 @@
 import '../models/language.dart';
 
-/// Constantes de idiomas soportados por la aplicación Flowio
-/// 
-/// Esta clase contiene todos los idiomas disponibles para traducción
-/// en una lista unificada y alfabéticamente ordenada.
 class LanguageConstants {
   
   // ===========================================================
-  //                  TODOS LOS IDIOMAS SOPORTADOS
+  //                  ALL AVAILABLE LANGUAGEs
   // ===========================================================
   
-  /// Lista completa de todos los idiomas soportados, ordenados alfabéticamente
+  /// Lista de todos los idiomas soportados por la aplicación.
   static const List<Language> allSupportedLanguages = [
     Language('af', 'Afrikáans'),
     Language('am', 'Amhárico'),
@@ -72,23 +68,17 @@ class LanguageConstants {
   ];
 
   // ===========================================================
-  //                  CONFIGURACIÓN POR DEFECTO
+  //                  DEFAULT CONFIG
   // ===========================================================
   
-  /// Idioma por defecto para el hablante fuente
   static const Language defaultSourceLanguage = Language('es', 'Español');
-  
-  /// Idioma por defecto para el hablante destino
   static const Language defaultTargetLanguage = Language('en', 'Inglés');
 
   // ===========================================================
-  //                  MÉTODOS DE UTILIDAD
+  //                  UTILITY METHODS
   // ===========================================================
-  
-  /// Encuentra un idioma por su código
-  /// 
-  /// Retorna el idioma correspondiente al código proporcionado,
-  /// o null si no se encuentra.
+   
+  /// Return el idioma correspondiente al código proporcionado o null si no existe
   static Language? findLanguageByCode(String code) {
     try {
       return allSupportedLanguages.firstWhere(
@@ -99,10 +89,8 @@ class LanguageConstants {
     }
   }
 
-  /// Encuentra un idioma por su nombre
-  /// 
-  /// Retorna el idioma correspondiente al nombre proporcionado,
-  /// o null si no se encuentra.
+
+  /// Return el idioma correspondiente al nombre proporcionado o null si no existe
   static Language? findLanguageByName(String name) {
     try {
       return allSupportedLanguages.firstWhere(
@@ -129,7 +117,7 @@ class LanguageConstants {
   }
 
   /// Obtiene la bandera emoji correspondiente a un código de idioma
-  /// 
+  ///
   /// Retorna un emoji de bandera representativo para el código de idioma dado.
   /// Si no encuentra una bandera específica, retorna un emoji de globo.
   static String getLanguageFlag(String languageCode) {

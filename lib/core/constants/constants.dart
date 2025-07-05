@@ -51,16 +51,10 @@ class Constants {
   static const int nextTurnDelayMs          = 500;
   static const int vadReinitDelayMs         = 300;
 
-// ===========================================================
-//                    LANGUAGE SETTINGS
-// ===========================================================
-  
-  // Nota: Los idiomas soportados están definidos en language_constants.dart
-  // para mejor organización y mantenimiento del código.
-}
 
 // ===========================================================
 //                    TIME DELAYS FUNCTION
 // ===========================================================
 /// Función de utilidad para delays
 Future<void> delay(int millisecs) async => Future.delayed(Duration(milliseconds: millisecs));
+}
