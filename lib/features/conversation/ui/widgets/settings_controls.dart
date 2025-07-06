@@ -244,7 +244,7 @@ class SettingsControls extends StatelessWidget {
             ),
             const SizedBox(width: 6),
             Text(
-              "Pausa para traducir",
+              "Traducir después de un silencio de:",
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,

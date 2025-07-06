@@ -4,9 +4,9 @@ class Constants {
 //  [IMPORTANT!] INITIAL CONFIGURATION FOR BACKEND CONNECTION
 // ===========================================================
 
-  static const bool   useLocalBackend = true;                                                   // Flag to use local backend or Huggin Face
+  static const bool   useLocalBackend = false;                                                   // Flag to use local backend or Huggin Face
   static const String localBackendIp  = "192.168.2.108";                                       // IPv4 address for local backend                   
-  static const String hfBackendUrl    = "wss://hawerx-flowio-backend.hf.space/ws/translate";  // Hugging Face backend URL
+  static const String hfBackendUrl    = "wss://hawerx-flowio-backend.hf.space/ws/translate_stream";  // Hugging Face backend URL
 
 // ===========================================================
 //                WEBSocket CONFIGURATION
