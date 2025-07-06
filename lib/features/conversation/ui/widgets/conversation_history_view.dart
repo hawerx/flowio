@@ -3,14 +3,14 @@ import 'package:provider/provider.dart';
 import '../../providers/conversation_provider.dart';
 import 'message_bubble.dart';
 
-class ConversationHistoryViewNew extends StatefulWidget {
-  const ConversationHistoryViewNew({super.key});
+class ConversationHistoryView extends StatefulWidget {
+  const ConversationHistoryView({super.key});
 
   @override
-  State<ConversationHistoryViewNew> createState() => _ConversationHistoryViewNewState();
+  State<ConversationHistoryView> createState() => _ConversationHistoryViewState();
 }
 
-class _ConversationHistoryViewNewState extends State<ConversationHistoryViewNew> {
+class _ConversationHistoryViewState extends State<ConversationHistoryView> {
   final ScrollController _scrollController = ScrollController();
 
   @override
@@ -82,7 +82,7 @@ class _ConversationHistoryViewNewState extends State<ConversationHistoryViewNew>
       itemBuilder: (context, index) {
         return Padding(
           padding: const EdgeInsets.only(bottom: 12.0),
-          child: MessageBubbleNew(message: reversedHistory[index]),
+          child: MessageBubble(message: reversedHistory[index]),
         );
       },
     );

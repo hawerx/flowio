@@ -5,8 +5,8 @@ import '../../../../core/models/language.dart';
 import '../../../../core/constants/language_constants.dart';
 import 'language_selection_popup.dart';
 
-class SettingsControlsNew extends StatelessWidget {
-  const SettingsControlsNew({super.key});
+class SettingsControls extends StatelessWidget {
+  const SettingsControls({super.key});
 
   @override
   Widget build(BuildContext context) {

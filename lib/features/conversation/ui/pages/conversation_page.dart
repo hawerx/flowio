@@ -95,7 +95,7 @@ class _ConversationPageState extends State<ConversationPage> {
               decoration: const BoxDecoration(
                 color: Colors.transparent,
               ),
-              child: const ConversationHistoryViewNew(),
+              child: const ConversationHistoryView(),
             ),
           ),
           // Controles (abajo)
@@ -110,7 +110,7 @@ class _ConversationPageState extends State<ConversationPage> {
                 ),
               ],
             ),
-            child: const SettingsControlsNew(),
+            child: const SettingsControls(),
           ),
         ],
       ),

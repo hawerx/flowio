@@ -4,16 +4,16 @@ import '../../../../core/models/message.dart';
 import '../../providers/conversation_provider.dart';
 import '../../../../core/services/conversation_manager.dart';
 
-class MessageBubbleNew extends StatefulWidget {
+class MessageBubble extends StatefulWidget {
   final Message message;
 
-  const MessageBubbleNew({super.key, required this.message});
+  const MessageBubble({super.key, required this.message});
 
   @override
-  State<MessageBubbleNew> createState() => _MessageBubbleNewState();
+  State<MessageBubble> createState() => _MessageBubbleState();
 }
 
-class _MessageBubbleNewState extends State<MessageBubbleNew> with TickerProviderStateMixin {
+class _MessageBubbleState extends State<MessageBubble> with TickerProviderStateMixin {
   late AnimationController _pulseAnimationController;
   late AnimationController _spinAnimationController;
 
