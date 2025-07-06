@@ -1,98 +1,177 @@
 import 'package:flutter/material.dart';
 import '../../../core/models/language.dart';
 import '../../../core/models/message.dart';
+import '../../../core/services/conversation_manager.dart';
 import '../../../core/utils/logger.dart';
+import '../../../core/constants/language_constants.dart';
 
 class ConversationProvider extends ChangeNotifier {
-  bool isConversing = false;
-  bool isListening = false;
-  bool isProcessing = false;
-  String? currentSpeaker;
-
-  double silenceDuration = 2.0;
-  Language sourceLang = availableLanguages[1]; // Español
-  Language targetLang = availableLanguages[0]; // Inglés
-
+  // Configuración
+  double silenceDuration = 1.0;
+  Language sourceLang = LanguageConstants.defaultSourceLanguage;
+  Language targetLang = LanguageConstants.defaultTargetLanguage;
   List<Message> history = [];
-  // Se elimina partialTranscription
 
-  static const List<Language> availableLanguages = [
-    Language('en', 'Inglés'), Language('es', 'Español'), Language('fr', 'Francés'),
-    Language('de', 'Alemán'), Language('it', 'Italiano'), Language('pt', 'Portugués'),
-  ];
-  
-  void startConversation() {
-    logger.i("---> LLamada a funcion startConversation[ConversationProvider]: Iniciando conversación. | isConversing: $isConversing | isListening: $isListening");
-    isConversing = true;
-    isListening = true;
-    currentSpeaker = 'source';
-    history.clear();
-    notifyListeners();
-  }
+  // Manager de conversación
+  final ConversationManager _conversationManager = ConversationManager();
+  bool _isInitialized = false;
 
-  void stopConversation() {
-    logger.i("---> LLamada a funcion stopConversacion[ConversationProvider]: Deteniendo conversacion. | isConversing: $isConversing | isListening: $isListening | isProcessing: $isProcessing | currentSpeaker: $currentSpeaker");
-    isConversing = false;
-    isListening = false;
-    isProcessing = false;
-    currentSpeaker = null;
-    notifyListeners();
-  }
+  // Idiomas disponibles
+  static List<Language> get availableLanguages => LanguageConstants.allSupportedLanguages;
 
-  void setSilenceDuration(double value) { 
-    logger.d("---> setSilenceDuration: $value");
-    silenceDuration = value; 
-    notifyListeners(); 
-  }
+  // Getters
+  bool get isConversing => _conversationManager.isActive;
+  bool get isListening => _conversationManager.isListening;
+  bool get isProcessing => _conversationManager.isProcessing;
+  bool get isSpeaking => _conversationManager.isSpeaking;
+  bool get isConnecting => _conversationManager.isConnecting;
+  bool get hasError => _conversationManager.hasError;
+  bool get isIdle => _conversationManager.isIdle;
+  String? get currentSpeaker => _conversationManager.currentSpeaker;
+  ConversationState get conversationState => _conversationManager.currentState;
 
-  void setSourceLang(Language lang) { 
-    logger.d("---> setSourceLang: ${lang.name}");
-    sourceLang = lang; 
-    notifyListeners(); 
-  }
+  /// Inicializa el provider
+  Future<void> initialize() async {
+    if (_isInitialized) return;
 
-  void setTargetLang(Language lang) { 
-    logger.d("---> setTargetLang: ${lang.name}");
-    targetLang = lang; 
-    notifyListeners(); 
-  }
+    try {
+      logger.i("Inicializando ConversationProvider...");
+      
+      final success = await _conversationManager.initialize();
+      if (!success) {
+        logger.e("Error inicializando ConversationManager");
+        return;
+      }
 
-  void addMessage(Message message) { 
-    logger.d("---> addMessage: Añadiendo mensaje al historial: '${message.originalText}'");
-    // Usamos insert en lugar de add para que el nuevo mensaje aparezca arriba
-    history.insert(0, message); 
-    notifyListeners(); 
-  }
-
-  void updateLastMessage({String? originalText, String? translatedText}) {
-    logger.i("---> updateLastMessage: Actualizando último mensaje con original: '$originalText' y traducción: '$translatedText'");
-    if (history.isNotEmpty) {
-      if(originalText != null) history.first.originalText = originalText;
-      if(translatedText != null) history.first.translatedText = translatedText;
-      notifyListeners();
+      _setupCallbacks();
+      _isInitialized = true;
+      
+      logger.i("ConversationProvider inicializado");
+    } catch (e, stackTrace) {
+      logger.e("Error inicializando ConversationProvider", error: e, stackTrace: stackTrace);
     }
   }
 
-  // Se añade esta función para eliminar el último mensaje si no se detectó habla
-  void removeLastMessage() {
+  /// Setup de callbacks - solo usar callbacks que realmente existen
+  void _setupCallbacks() {
+    // Verificar qué callbacks realmente existen en ConversationManager
+    try {
+      _conversationManager.onMessageAdded = _addMessage;
+      _conversationManager.onMessageUpdated = _updateMessage;
+      _conversationManager.onMessageRemoved = _removeMessage;
+      _conversationManager.onTurnChanged = _onTurnChanged;
+      _conversationManager.onStateChanged = _onStateChanged;
+      
+      // Solo asignar si existen estos callbacks
+      if (_conversationManager.getSilenceDuration != null) {
+        _conversationManager.getSilenceDuration = () => silenceDuration;
+      }
+      
+      if (_conversationManager.getTargetLanguageCode != null) {
+        _conversationManager.getTargetLanguageCode = _getTargetLanguageCode;
+      }
+    } catch (e) {
+      logger.e("Error configurando callbacks: $e");
+    }
+  }
+
+  void _addMessage(Message message) {
+    history.insert(0, message);
+    notifyListeners();
+  }
+
+  void _updateMessage({String? originalText, String? translatedText}) {
+    if (history.isEmpty) return;
+    
+    final message = history.first;
+    if (originalText != null) message.originalText = originalText;
+    if (translatedText != null) message.translatedText = translatedText;
+    notifyListeners();
+  }
+
+  void _removeMessage() {
     if (history.isNotEmpty) {
       history.removeAt(0);
       notifyListeners();
     }
   }
 
-  void switchTurn() { 
-    logger.i("---> switchTurn: Cambiando turno. Nuevo hablante: ${(currentSpeaker == 'source') ? 'target' : 'source'}");
-    currentSpeaker = (currentSpeaker == 'source') ? 'target' : 'source'; 
-    isListening = true; 
-    isProcessing = false; 
-    notifyListeners(); 
+  void _onTurnChanged() {
+    logger.i("Turno: ${_conversationManager.currentSpeaker}");
+    notifyListeners();
   }
 
-  void setProcessing() { 
-    logger.i("---> setProcessing: Cambiando a estado 'Procesando'.");
-    isListening = false; 
-    isProcessing = true; 
-    notifyListeners(); 
+  void _onStateChanged() {
+    logger.d("Estado: ${_conversationManager.currentState}");
+    notifyListeners();
+  }
+
+  String _getTargetLanguageCode() {
+    return _conversationManager.currentSpeaker == 'source' 
+        ? targetLang.code 
+        : sourceLang.code;
+  }
+
+  /// Inicia la conversación
+  Future<void> startConversation() async {
+    
+    await initialize();
+    history.clear();
+    
+    final success = await _conversationManager.startConversation(sourceLang, targetLang);
+    if (!success) {
+      logger.e("❌ Error iniciando conversación");
+    }
+  }
+
+  /// Detiene la conversación
+  Future<void> stopConversation() async {
+    await _conversationManager.stopConversation();
+    _cleanupTemporaryMessages();
+    notifyListeners();
+  }
+
+  /// Limpieza de mensajes temporales 
+  void _cleanupTemporaryMessages() {
+    history.removeWhere((msg) => 
+      msg.originalText == "Escuchando..." && 
+      (msg.translatedText == "..." || msg.translatedText.isEmpty));
+  }
+
+  /// Configuración con validación
+  void setSilenceDuration(double value) {
+    final clampedValue = value.clamp(0.5, 5.0);
+    if (clampedValue != silenceDuration) {
+      silenceDuration = clampedValue;
+      notifyListeners();
+    }
+  }
+
+  void setSourceLang(Language lang) {
+    if (lang != sourceLang) {
+      sourceLang = lang;
+      notifyListeners();
+    }
+  }
+
+  void setTargetLang(Language lang) {
+    if (lang != targetLang) {
+      targetLang = lang;
+      notifyListeners();
+    }
+  }
+
+  void swapLanguages() {
+    logger.d("---> swapLanguages: ${sourceLang.name} <-> ${targetLang.name}");
+    final temp = sourceLang;
+    sourceLang = targetLang;
+    targetLang = temp;
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _conversationManager.dispose();
+    super.dispose();
   }
 }
