@@ -1,0 +1,92 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../providers/conversation_provider.dart';
+import 'message_bubble.dart';
+
+class ConversationHistoryView extends StatefulWidget {
+  const ConversationHistoryView({super.key});
+
+  @override
+  State<ConversationHistoryView> createState() => _ConversationHistoryViewState();
+}
+
+class _ConversationHistoryViewState extends State<ConversationHistoryView> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final provider = context.watch<ConversationProvider>();
+    if (provider.history.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_scrollController.hasClients) {
+          // Scroll inmediato sin animación para mejor responsividad
+          _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = context.watch<ConversationProvider>();
+    
+    if (provider.history.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.chat_bubble_outline,
+              size: 80,
+              color: Theme.of(context).colorScheme.onSurface.withValues(alpha:0.3),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              "¡Listo para conversar!",
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w500,
+                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              "Presiona 'Iniciar Conversación' para comenzar",
+              style: TextStyle(
+                fontSize: 14,
+                color: Theme.of(context).colorScheme.onSurface.withValues(alpha:0.4),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Invertir la lista para mostrar los más nuevos abajo
+    final reversedHistory = provider.history.reversed.toList();
+
+    return ListView.builder(
+      controller: _scrollController,
+      padding: const EdgeInsets.all(16.0),
+      itemCount: reversedHistory.length,
+      // añadimos physics para mejor scroll
+      physics: const BouncingScrollPhysics(),
+      itemBuilder: (context, index) {
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12.0),
+          child: MessageBubble(
+            key: ValueKey(reversedHistory[index].id), // id para evitar reconstrucciones
+            message: reversedHistory[index]
+          ),
+        );
+      },
+    );
+  }
+}
